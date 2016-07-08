@@ -127,7 +127,7 @@ func (p provider) GetItems(ctx context.Context, account api.ExternalAccount, q a
 		Count int64  `json:"@odata.count"`
 		Next  string `json:"@odata.nextLink"`
 		Value []struct {
-			Id               string
+			ID               string `json:"Id"`
 			ReceivedDateTime time.Time
 			Subject          string
 			BodyPreview      string
@@ -158,7 +158,7 @@ func (p provider) GetItems(ctx context.Context, account api.ExternalAccount, q a
 		res.Items = append(res.Items, api.EmailItem{
 			ItemForUser: api.ItemForUser{
 				FeedItem: api.FeedItem{
-					GUID:      item.Id,
+					GUID:      item.ID,
 					Title:     item.Subject,
 					Published: item.ReceivedDateTime,
 					Link:      item.WebLink,

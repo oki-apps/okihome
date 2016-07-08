@@ -15,12 +15,12 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	_ "github.com/lib/pq"
 	"github.com/oki-apps/okihome"
 	"github.com/oki-apps/okihome/api"
 	"github.com/oki-apps/okihome/logInteractor/console"
 	"github.com/oki-apps/okihome/providers/gmail"
 	"github.com/oki-apps/okihome/providers/outlook"
-	"github.com/oki-apps/okihome/repository/memory"
 	"github.com/oki-apps/okihome/repository/postgresql"
 	"github.com/oki-apps/okihome/userInteractor/contextUser"
 	"github.com/oki-apps/server"
@@ -54,8 +54,7 @@ func readConfig() config {
 		os.Exit(1)
 	}
 
-	fmt.Println(os.Args)
-	fmt.Println(cfg)
+	fmt.Println("Configuration read from ", path)
 
 	return cfg
 }
@@ -76,7 +75,8 @@ func main() {
 			os.Exit(1)
 		}
 	} else {
-		repo = memory.New()
+		fmt.Println("Missing PostgreSQL configuration")
+		os.Exit(1)
 	}
 
 	//Log
