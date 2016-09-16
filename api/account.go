@@ -23,6 +23,7 @@ const (
 type ProviderDescription struct {
 	Name              string    `json:"name"`
 	Title             string    `json:"title"`
+	Link              string    `json:"link"`
 	AvailableServices []Service `json:"services"`
 }
 

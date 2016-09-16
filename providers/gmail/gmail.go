@@ -6,6 +6,7 @@ package gmail
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"golang.org/x/net/context"
@@ -34,6 +35,7 @@ type Config struct {
 var description = api.ProviderDescription{
 	Name:              "google",
 	Title:             "Gmail",
+	Link:              "https://gmail.com",
 	AvailableServices: []api.Service{api.ServiceEmail},
 }
 
@@ -142,7 +144,6 @@ func (p provider) GetItems(ctx context.Context, account api.ExternalAccount, q a
 	fmt.Println("Got ", len(r.Threads), " threads")
 
 	for _, thread := range r.Threads {
-		fmt.Println("Thread ID ", thread.Id, thread.HistoryId)
 
 		emailItem, err := p.r.GetEmailItem(ctx, account, thread.Id, thread.HistoryId)
 		if err != nil {
@@ -240,12 +241,14 @@ func (p provider) createEmailItem(ctx context.Context, srv *gmail.Service, user 
 	}
 
 	res.Published = time.Unix(int64(time.Duration(lastMessage.InternalDate)/(time.Second/time.Millisecond)), 0)
-	fmt.Println(res.Published, lastMessage.InternalDate)
 
 	//From
-	res.From, err = getHeader(firstMessage, "From")
+	res.From, err = getHeader(mainMessage, "From")
 	if err != nil {
 		return api.EmailItem{}, errors.Wrap(err, "Unable to retrieve thread sender for "+thread.Id)
+	}
+	if strings.Index(res.From, "<") > 1 {
+		res.From = res.From[:strings.Index(res.From, "<")]
 	}
 	if len(froms) > 1 {
 		res.From = fmt.Sprintf("%s (%d)", res.From, len(froms))

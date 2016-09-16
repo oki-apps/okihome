@@ -33,6 +33,7 @@ const WidgetEmailType = "email"
 type WidgetConfig struct {
 	Title        string `json:"title" db:"title"`
 	DisplayCount int    `json:"display_count,omitempty"`
+	Link         string `json:"link,omitempty"`
 }
 
 //ConfigFeed is the configuration for a feed widget

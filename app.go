@@ -397,6 +397,9 @@ func (app App) NewWidget(ctx context.Context, tabID int64, widget api.Widget) (a
 		if len(cfg.Title) == 0 {
 			cfg.Title = provider.Description().Title
 		}
+		if len(cfg.Link) == 0 {
+			cfg.Link = provider.Description().Link
+		}
 
 		widget.Config = cfg
 	}

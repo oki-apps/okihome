@@ -34,6 +34,7 @@ type Config struct {
 var description = api.ProviderDescription{
 	Name:              "outlook",
 	Title:             "Outlook.com",
+	Link:              "http://outlook.live.com",
 	AvailableServices: []api.Service{api.ServiceEmail},
 }
 
