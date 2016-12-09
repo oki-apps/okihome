@@ -5,7 +5,7 @@
 package api
 
 import (
-	"golang.org/x/net/context"
+	"context"
 )
 
 //Repository is the interface allowing usage of any data store for tabs, widgets, read flags and all other data.

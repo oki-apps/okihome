@@ -5,6 +5,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -13,7 +14,6 @@ import (
 	"strconv"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	_ "github.com/lib/pq"
 	"github.com/oki-apps/okihome"
@@ -107,31 +107,31 @@ func main() {
 
 	s.Public(server.NewJSONRoute("GET", "/api/version", webApp.GetVersion))
 
-	s.Private(server.NewJSONRoute("GET", "/api/users/:userID", webApp.GetUser))
+	s.Private(server.NewJSONRoute("GET", "/api/users/{userID}", webApp.GetUser))
 
-	s.Private(server.NewRouteFunc("GET", "/pages/services/:serviceName/callback", webApp.ServiceCallback))
-	s.Private(server.NewRouteFunc("GET", "/pages/services/:serviceName/register", webApp.ServiceRegister))
-	s.Private(server.NewRouteFunc("GET", "/pages/users/:userID/accounts/:accountID", webApp.AccountStatus))
+	s.Private(server.NewRouteFunc("GET", "/pages/services/{serviceName}/callback", webApp.ServiceCallback))
+	s.Private(server.NewRouteFunc("GET", "/pages/services/{serviceName}/register", webApp.ServiceRegister))
+	s.Private(server.NewRouteFunc("GET", "/pages/users/{userID}/accounts/{accountID}", webApp.AccountStatus))
 
 	s.Private(server.NewJSONRoute("GET", "/api/services", webApp.GetServices))
 
 	s.Private(server.NewJSONRoute("POST", "/api/tabs", webApp.NewTab))
-	s.Private(server.NewJSONRoute("GET", "/api/tabs/:tabID", webApp.GetTab))
-	s.Private(server.NewJSONRoute("POST", "/api/tabs/:tabID", webApp.EditTab))
-	s.Private(server.NewJSONRoute("DELETE", "/api/tabs/:tabID", webApp.DeleteTab))
+	s.Private(server.NewJSONRoute("GET", "/api/tabs/{tabID}", webApp.GetTab))
+	s.Private(server.NewJSONRoute("POST", "/api/tabs/{tabID}", webApp.EditTab))
+	s.Private(server.NewJSONRoute("DELETE", "/api/tabs/{tabID}", webApp.DeleteTab))
 
-	s.Private(server.NewJSONRoute("POST", "/api/tabs/:tabID/widgets", webApp.NewWidget))
-	s.Private(server.NewJSONRoute("POST", "/api/tabs/:tabID/widgets/:widgetID", webApp.EditWidget))
-	s.Private(server.NewJSONRoute("DELETE", "/api/tabs/:tabID/widgets/:widgetID", webApp.DeleteWidget))
-	s.Private(server.NewJSONRoute("POST", "/api/tabs/:tabID/layout", webApp.UpdateLayout))
+	s.Private(server.NewJSONRoute("POST", "/api/tabs/{tabID}/widgets", webApp.NewWidget))
+	s.Private(server.NewJSONRoute("POST", "/api/tabs/{tabID}/widgets/{widgetID}", webApp.EditWidget))
+	s.Private(server.NewJSONRoute("DELETE", "/api/tabs/{tabID}/widgets/{widgetID}", webApp.DeleteWidget))
+	s.Private(server.NewJSONRoute("POST", "/api/tabs/{tabID}/layout", webApp.UpdateLayout))
 
-	s.Private(server.NewJSONRoute("GET", "/api/users/:userID/feeds/:feedID/items", webApp.GetFeedItems))
-	s.Private(server.NewJSONRoute("POST", "/api/users/:userID/feeds/:feedID", webApp.MarkAsRead))
+	s.Private(server.NewJSONRoute("GET", "/api/users/{userID}/feeds/{feedID}/items", webApp.GetFeedItems))
+	s.Private(server.NewJSONRoute("POST", "/api/users/{userID}/feeds/{feedID}", webApp.MarkAsRead))
 
-	s.Private(server.NewJSONRoute("GET", "/api/users/:userID/accounts", webApp.GetAssociatedAccounts))
-	s.Private(server.NewJSONRoute("DELETE", "/api/users/:userID/accounts/:accountID", webApp.RevokeAccount))
+	s.Private(server.NewJSONRoute("GET", "/api/users/{userID}/accounts", webApp.GetAssociatedAccounts))
+	s.Private(server.NewJSONRoute("DELETE", "/api/users/{userID}/accounts/{accountID}", webApp.RevokeAccount))
 
-	s.Private(server.NewJSONRoute("GET", "/api/users/:userID/accounts/:accountID/emails", webApp.GetEmails))
+	s.Private(server.NewJSONRoute("GET", "/api/users/{userID}/accounts/{accountID}/emails", webApp.GetEmails))
 
 	s.Private(server.NewJSONRoute("POST", "/api/preview", webApp.Preview))
 
@@ -176,8 +176,10 @@ func (wa webApp) CheckPassword(ctx context.Context, userID, password string) err
 	return nil
 }
 
-func (wa webApp) ServiceCallback(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	serviceName := server.Param(ctx, "serviceName")
+func (wa webApp) ServiceCallback(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	serviceName := server.Param(r, "serviceName")
 
 	state := r.FormValue("state")
 	code := r.FormValue("code")
@@ -221,8 +223,10 @@ func (wa webApp) ServiceCallback(ctx context.Context, w http.ResponseWriter, r *
 
 }
 
-func (wa webApp) ServiceRegister(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	serviceName := server.Param(ctx, "serviceName")
+func (wa webApp) ServiceRegister(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	serviceName := server.Param(r, "serviceName")
 
 	//Get userID from context
 	userID, err := server.GetUserID(ctx)
@@ -261,9 +265,11 @@ func (wa webApp) ServiceRegister(ctx context.Context, w http.ResponseWriter, r *
 	http.Redirect(w, r, url, http.StatusFound)
 }
 
-func (wa webApp) AccountStatus(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	userID := server.Param(ctx, "userID")
-	accountIDstr := server.Param(ctx, "accountID")
+func (wa webApp) AccountStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	userID := server.Param(r, "userID")
+	accountIDstr := server.Param(r, "accountID")
 	accountID, err := strconv.ParseInt(accountIDstr, 10, 64)
 	if err != nil {
 		e := errors.Wrap(invalidEntry{err}, "Account ID error")
@@ -303,13 +309,14 @@ func (wa webApp) AccountStatus(ctx context.Context, w http.ResponseWriter, r *ht
 
 }
 
-func (wa webApp) GetVersion(ctx context.Context, req *http.Request) (interface{}, error) {
+func (wa webApp) GetVersion(req *http.Request) (interface{}, error) {
 	return struct {
 		Version string `json:"version"`
 	}{Version: "0.7"}, nil
 }
 
-func (wa webApp) GetServices(ctx context.Context, req *http.Request) (interface{}, error) {
+func (wa webApp) GetServices(req *http.Request) (interface{}, error) {
+	ctx := req.Context()
 
 	data, err := wa.app.Services(ctx)
 	if err != nil {
@@ -321,8 +328,10 @@ func (wa webApp) GetServices(ctx context.Context, req *http.Request) (interface{
 	return data, nil
 }
 
-func (wa webApp) GetUser(ctx context.Context, req *http.Request) (interface{}, error) {
-	userID := server.Param(ctx, "userID")
+func (wa webApp) GetUser(req *http.Request) (interface{}, error) {
+	ctx := req.Context()
+
+	userID := server.Param(req, "userID")
 
 	data, err := wa.app.User(ctx, userID)
 	if err != nil {
@@ -334,8 +343,10 @@ func (wa webApp) GetUser(ctx context.Context, req *http.Request) (interface{}, e
 	return data, nil
 }
 
-func (wa webApp) GetAssociatedAccounts(ctx context.Context, req *http.Request) (interface{}, error) {
-	userID := server.Param(ctx, "userID")
+func (wa webApp) GetAssociatedAccounts(req *http.Request) (interface{}, error) {
+	ctx := req.Context()
+
+	userID := server.Param(req, "userID")
 
 	data, err := wa.app.AssociatedAccounts(ctx, userID)
 	if err != nil {
@@ -347,9 +358,11 @@ func (wa webApp) GetAssociatedAccounts(ctx context.Context, req *http.Request) (
 	return data, nil
 }
 
-func (wa webApp) RevokeAccount(ctx context.Context, req *http.Request) (interface{}, error) {
-	userID := server.Param(ctx, "userID")
-	accountIDstr := server.Param(ctx, "accountID")
+func (wa webApp) RevokeAccount(req *http.Request) (interface{}, error) {
+	ctx := req.Context()
+
+	userID := server.Param(req, "userID")
+	accountIDstr := server.Param(req, "accountID")
 	accountID, err := strconv.ParseInt(accountIDstr, 10, 64)
 	if err != nil {
 		e := errors.Wrap(invalidEntry{err}, "Account ID error")
@@ -366,8 +379,10 @@ func (wa webApp) RevokeAccount(ctx context.Context, req *http.Request) (interfac
 	return data, nil
 }
 
-func (wa webApp) GetTab(ctx context.Context, req *http.Request) (interface{}, error) {
-	tabIDstr := server.Param(ctx, "tabID")
+func (wa webApp) GetTab(req *http.Request) (interface{}, error) {
+	ctx := req.Context()
+
+	tabIDstr := server.Param(req, "tabID")
 	tabID, err := strconv.ParseInt(tabIDstr, 10, 64)
 	if err != nil {
 		e := errors.Wrap(invalidEntry{err}, "Tab ID error")
@@ -385,8 +400,10 @@ func (wa webApp) GetTab(ctx context.Context, req *http.Request) (interface{}, er
 	return data, nil
 }
 
-func (wa webApp) DeleteTab(ctx context.Context, req *http.Request) (interface{}, error) {
-	tabIDstr := server.Param(ctx, "tabID")
+func (wa webApp) DeleteTab(req *http.Request) (interface{}, error) {
+	ctx := req.Context()
+
+	tabIDstr := server.Param(req, "tabID")
 	tabID, err := strconv.ParseInt(tabIDstr, 10, 64)
 	if err != nil {
 		e := errors.Wrap(invalidEntry{err}, "Tab ID error")
@@ -404,8 +421,10 @@ func (wa webApp) DeleteTab(ctx context.Context, req *http.Request) (interface{},
 	return data, nil
 }
 
-func (wa webApp) EditTab(ctx context.Context, req *http.Request) (interface{}, error) {
-	tabIDstr := server.Param(ctx, "tabID")
+func (wa webApp) EditTab(req *http.Request) (interface{}, error) {
+	ctx := req.Context()
+
+	tabIDstr := server.Param(req, "tabID")
 	tabID, err := strconv.ParseInt(tabIDstr, 10, 64)
 	if err != nil {
 		e := errors.Wrap(invalidEntry{err}, "Tab ID error")
@@ -438,7 +457,8 @@ func (wa webApp) EditTab(ctx context.Context, req *http.Request) (interface{}, e
 	return data, nil
 }
 
-func (wa webApp) NewTab(ctx context.Context, req *http.Request) (interface{}, error) {
+func (wa webApp) NewTab(req *http.Request) (interface{}, error) {
+	ctx := req.Context()
 
 	body, err := ioutil.ReadAll(req.Body)
 	defer req.Body.Close()
@@ -465,8 +485,10 @@ func (wa webApp) NewTab(ctx context.Context, req *http.Request) (interface{}, er
 	return data, nil
 }
 
-func (wa webApp) NewWidget(ctx context.Context, req *http.Request) (interface{}, error) {
-	tabIDstr := server.Param(ctx, "tabID")
+func (wa webApp) NewWidget(req *http.Request) (interface{}, error) {
+	ctx := req.Context()
+
+	tabIDstr := server.Param(req, "tabID")
 	tabID, err := strconv.ParseInt(tabIDstr, 10, 64)
 	if err != nil {
 		e := errors.Wrap(invalidEntry{err}, "Tab ID error")
@@ -544,15 +566,17 @@ func (wa webApp) NewWidget(ctx context.Context, req *http.Request) (interface{},
 	return data, nil
 }
 
-func (wa webApp) EditWidget(ctx context.Context, req *http.Request) (interface{}, error) {
-	tabIDstr := server.Param(ctx, "tabID")
+func (wa webApp) EditWidget(req *http.Request) (interface{}, error) {
+	ctx := req.Context()
+
+	tabIDstr := server.Param(req, "tabID")
 	tabID, err := strconv.ParseInt(tabIDstr, 10, 64)
 	if err != nil {
 		e := errors.Wrap(invalidEntry{err}, "Tab ID error")
 		wa.app.Error(ctx, e)
 		return nil, e
 	}
-	widgetIDstr := server.Param(ctx, "widgetID")
+	widgetIDstr := server.Param(req, "widgetID")
 	widgetID, err := strconv.ParseInt(widgetIDstr, 10, 64)
 	if err != nil {
 		e := errors.Wrap(invalidEntry{err}, "Widget ID error")
@@ -585,15 +609,17 @@ func (wa webApp) EditWidget(ctx context.Context, req *http.Request) (interface{}
 	return data, nil
 }
 
-func (wa webApp) DeleteWidget(ctx context.Context, req *http.Request) (interface{}, error) {
-	tabIDstr := server.Param(ctx, "tabID")
+func (wa webApp) DeleteWidget(req *http.Request) (interface{}, error) {
+	ctx := req.Context()
+
+	tabIDstr := server.Param(req, "tabID")
 	tabID, err := strconv.ParseInt(tabIDstr, 10, 64)
 	if err != nil {
 		e := errors.Wrap(invalidEntry{err}, "Tab ID error")
 		wa.app.Error(ctx, e)
 		return nil, e
 	}
-	widgetIDstr := server.Param(ctx, "widgetID")
+	widgetIDstr := server.Param(req, "widgetID")
 	widgetID, err := strconv.ParseInt(widgetIDstr, 10, 64)
 	if err != nil {
 		e := errors.Wrap(invalidEntry{err}, "Widget ID error")
@@ -611,8 +637,10 @@ func (wa webApp) DeleteWidget(ctx context.Context, req *http.Request) (interface
 	return data, nil
 }
 
-func (wa webApp) UpdateLayout(ctx context.Context, req *http.Request) (interface{}, error) {
-	tabIDstr := server.Param(ctx, "tabID")
+func (wa webApp) UpdateLayout(req *http.Request) (interface{}, error) {
+	ctx := req.Context()
+
+	tabIDstr := server.Param(req, "tabID")
 	tabID, err := strconv.ParseInt(tabIDstr, 10, 64)
 	if err != nil {
 		e := errors.Wrap(invalidEntry{err}, "Tab ID error")
@@ -645,7 +673,8 @@ func (wa webApp) UpdateLayout(ctx context.Context, req *http.Request) (interface
 	return data, nil
 }
 
-func (wa webApp) Preview(ctx context.Context, req *http.Request) (interface{}, error) {
+func (wa webApp) Preview(req *http.Request) (interface{}, error) {
+	ctx := req.Context()
 
 	url := req.FormValue("url")
 	if len(url) == 0 && req.Body != nil {
@@ -670,10 +699,12 @@ func (wa webApp) Preview(ctx context.Context, req *http.Request) (interface{}, e
 	return data, nil
 }
 
-func (wa webApp) GetFeedItems(ctx context.Context, req *http.Request) (interface{}, error) {
-	userID := server.Param(ctx, "userID")
+func (wa webApp) GetFeedItems(req *http.Request) (interface{}, error) {
+	ctx := req.Context()
 
-	feedIDstr := server.Param(ctx, "feedID")
+	userID := server.Param(req, "userID")
+
+	feedIDstr := server.Param(req, "feedID")
 	feedID, err := strconv.ParseInt(feedIDstr, 10, 64)
 	if err != nil {
 		e := errors.Wrap(invalidEntry{err}, "Feed ID error")
@@ -691,10 +722,12 @@ func (wa webApp) GetFeedItems(ctx context.Context, req *http.Request) (interface
 	return data, nil
 }
 
-func (wa webApp) MarkAsRead(ctx context.Context, req *http.Request) (interface{}, error) {
-	userID := server.Param(ctx, "userID")
+func (wa webApp) MarkAsRead(req *http.Request) (interface{}, error) {
+	ctx := req.Context()
 
-	feedIDstr := server.Param(ctx, "feedID")
+	userID := server.Param(req, "userID")
+
+	feedIDstr := server.Param(req, "feedID")
 	feedID, err := strconv.ParseInt(feedIDstr, 10, 64)
 	if err != nil {
 		e := errors.Wrap(invalidEntry{err}, "Feed ID error")
@@ -728,10 +761,12 @@ func (wa webApp) MarkAsRead(ctx context.Context, req *http.Request) (interface{}
 	return nil, nil
 }
 
-func (wa webApp) GetEmails(ctx context.Context, req *http.Request) (interface{}, error) {
-	userID := server.Param(ctx, "userID")
+func (wa webApp) GetEmails(req *http.Request) (interface{}, error) {
+	ctx := req.Context()
 
-	accountIDstr := server.Param(ctx, "accountID")
+	userID := server.Param(req, "userID")
+
+	accountIDstr := server.Param(req, "accountID")
 	accountID, err := strconv.ParseInt(accountIDstr, 10, 64)
 	if err != nil {
 		e := errors.Wrap(invalidEntry{err}, "Account ID error")

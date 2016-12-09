@@ -5,12 +5,12 @@
 package outlook
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"io/ioutil"
 	"time"
 
-	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 
 	"github.com/pkg/errors"

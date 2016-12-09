@@ -5,7 +5,8 @@
 package api
 
 import (
-	"golang.org/x/net/context"
+	"context"
+
 	"golang.org/x/oauth2"
 )
 

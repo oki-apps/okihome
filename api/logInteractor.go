@@ -5,7 +5,7 @@
 package api
 
 import (
-	"golang.org/x/net/context"
+	"context"
 )
 
 //LogInteractor allows logging of application messages

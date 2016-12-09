@@ -5,7 +5,7 @@
 package contextUser
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/oki-apps/okihome/api"
 	"github.com/oki-apps/server"
