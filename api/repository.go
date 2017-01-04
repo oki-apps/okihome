@@ -12,10 +12,10 @@ import (
 type Repository interface {
 	RunInTransaction(ctx context.Context, f func(repo Repository) error) error
 
-	CheckPassword(ctx context.Context, userID string, userPassword string) error
+	IsNotFound(err error) bool
 
 	GetUser(ctx context.Context, userID string) (User, error)
-	//StoreUser(ctx context.Context, user *User) error
+	StoreUser(ctx context.Context, user *User) error
 	//DeleteUser(ctx context.Context, userID string) error
 
 	GetTabs(ctx context.Context, userID string) ([]TabSummary, error)

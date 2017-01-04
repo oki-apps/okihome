@@ -8,8 +8,16 @@ import (
 	"context"
 )
 
+//UserInfo allow access to basic user information
+type UserInfo interface {
+	ID() string
+	DisplayName() string
+	Email() string
+}
+
 //UserInteractor allows interactions with the User connected to the application
 type UserInteractor interface {
 	CurrentUserIsAdmin(ctx context.Context) bool
 	CurrentUserID(ctx context.Context) (string, error)
+	CurrentUser(ctx context.Context) (UserInfo, error)
 }

@@ -57,11 +57,6 @@ func (app *App) Error(ctx context.Context, err error) {
 	app.logInteractor.Errorf(ctx, "%s", err)
 }
 
-//CheckPassword checks if the given password matches the stored one.
-func (app App) CheckPassword(ctx context.Context, userID string, password string) error {
-	return app.repository.CheckPassword(ctx, userID, password)
-}
-
 type notAuthorized string
 
 func (err notAuthorized) IsNotAuthorized() bool {
@@ -81,15 +76,15 @@ type UserData struct {
 func (app App) User(ctx context.Context, userID string) (UserData, error) {
 
 	//Check that a user is logged
-	loggedInUserID, err := app.userInteractor.CurrentUserID(ctx)
+	loggedInUser, err := app.userInteractor.CurrentUser(ctx)
 	if err != nil {
 		return UserData{}, errors.Wrap(err, "retrieving current user failed")
 	}
 
 	//Check authorization
-	if userID != loggedInUserID {
+	if userID != loggedInUser.ID() {
 		if !app.userInteractor.CurrentUserIsAdmin(ctx) {
-			return UserData{}, errors.Wrap(notAuthorized("access denied to user: "+userID), "access by "+loggedInUserID)
+			return UserData{}, errors.Wrap(notAuthorized("access denied to user: "+userID), "access by "+loggedInUser.ID())
 		}
 	}
 
@@ -98,7 +93,18 @@ func (app App) User(ctx context.Context, userID string) (UserData, error) {
 	//Get the user in datastore
 	data.User, err = app.repository.GetUser(ctx, userID)
 	if err != nil {
-		return UserData{}, errors.Wrap(err, "retrieving user from datastore failed")
+		if app.repository.IsNotFound(err) {
+			data.User.UserID = loggedInUser.ID()
+			data.User.DisplayName = loggedInUser.DisplayName()
+			data.User.Email = loggedInUser.Email()
+			data.User.IsAdmin = false
+
+			err = app.repository.StoreUser(ctx, &data.User)
+		}
+
+		if err != nil {
+			return UserData{}, errors.Wrap(err, "retrieving user from datastore failed")
+		}
 	}
 
 	data.Tabs, err = app.repository.GetTabs(ctx, userID)

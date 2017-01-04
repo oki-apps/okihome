@@ -29,8 +29,18 @@ func (i *interactor) CurrentUserIsAdmin(ctx context.Context) bool {
 	return userID == "admin"
 }
 
-//CurrentUserID returns the ID of the current user.
-//Returns an empty string if not logged in.
+//CurrentUserID returns the info of the current user.
+//Returns an nil value if not logged in.
 func (i *interactor) CurrentUserID(ctx context.Context) (string, error) {
-	return server.GetUserID(ctx)
+	u, err := i.CurrentUser(ctx)
+	if err != nil {
+		return "", err
+	}
+	return u.ID(), nil
+}
+
+//CurrentUserID returns the info of the current user.
+//Returns an nil value if not logged in.
+func (i *interactor) CurrentUser(ctx context.Context) (api.UserInfo, error) {
+	return server.GetUserInfo(ctx)
 }

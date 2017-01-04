@@ -24,7 +24,6 @@ CREATE TABLE t_user (
     display_name text,
     email text,
     isadmin boolean,
-    password text,
     CONSTRAINT c_pk_user PRIMARY KEY (id)
 );
 

@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -74,6 +75,13 @@ func (r *repo) RunInTransaction(ctx context.Context, f func(repo api.Repository)
 
 	return nil
 }
+
+func (r *repo) IsNotFound(err error) bool {
+
+	return errors.Cause(err) == sql.ErrNoRows
+
+}
+
 func (r *repo) Queryer() sqlx.Queryer {
 	if r.Tx != nil {
 		return r.Tx
@@ -89,25 +97,6 @@ func (r *repo) Execer() sqlx.Execer {
 	return r.DB
 }
 
-func (r *repo) CheckPassword(ctx context.Context, userID string, userPassword string) error {
-
-	var count int64
-	err := sqlx.Get(
-		r.Queryer(), &count,
-		`SELECT count(*) FROM okihome.t_user WHERE id=$1 AND password=crypt($2, password)`,
-		userID, userPassword)
-
-	if err != nil {
-		return errors.Wrap(err, "Counting user failed")
-	}
-
-	if count != 1 {
-		return errors.New("Authentication failed: invalid user or password")
-	}
-
-	return nil
-}
-
 func (r *repo) GetUser(ctx context.Context, userID string) (api.User, error) {
 
 	var u api.User
@@ -117,10 +106,23 @@ func (r *repo) GetUser(ctx context.Context, userID string) (api.User, error) {
 		userID)
 
 	if err != nil {
+		log.Printf("GetUser failed: %+v", err)
 		return api.User{}, errors.Wrap(err, "Fetching user failed")
 	}
 
 	return u, nil
+}
+
+func (r *repo) StoreUser(ctx context.Context, user *api.User) error {
+
+	_, err := r.Execer().Exec(
+		"INSERT INTO okihome.t_user(id,display_name,email,isadmin) VALUES ($1,$2,$3,$4)",
+		user.UserID, user.DisplayName, user.Email, user.IsAdmin)
+	if err != nil {
+		return errors.Wrap(err, "Inserting user failed")
+	}
+
+	return nil
 }
 
 func (r *repo) GetTabs(ctx context.Context, userID string) ([]api.TabSummary, error) {

@@ -5,7 +5,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -98,12 +97,18 @@ func main() {
 
 	app := okihome.NewApp(repo, userInteractor, logInteractor, providers)
 
-	webApp := newWebApp(app)
+	webApp, err := newWebApp(app)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 
 	//Server
-	s := server.New(cfg.Server)
-	s.CheckPassword = webApp.CheckPassword
-	s.Login("/api/login")
+	s, err := server.New(cfg.Server)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 
 	s.Public(server.NewJSONRoute("GET", "/api/version", webApp.GetVersion))
 
@@ -137,7 +142,8 @@ func main() {
 
 	s.Public(server.NewStaticFilesRoute("/app", http.Dir(cfg.StaticFileDir)))
 
-	s.Public(server.NewRedirectRoute("/", "/app"))
+	s.Public(server.NewRedirectRoute("/app", "/app/"))
+	s.Public(server.NewRedirectRoute("/", "/app/"))
 
 	//Start web app
 	if err := s.Run(); err != nil {
@@ -161,19 +167,8 @@ type webApp struct {
 	app *okihome.App
 }
 
-func newWebApp(app *okihome.App) webApp {
-	return webApp{app: app}
-}
-
-func (wa webApp) CheckPassword(ctx context.Context, userID, password string) error {
-	err := wa.app.CheckPassword(ctx, userID, password)
-	if err != nil {
-		e := errors.Wrap(invalidEntry{err}, "Authentication failed")
-		wa.app.Error(ctx, e)
-		return e
-	}
-
-	return nil
+func newWebApp(app *okihome.App) (webApp, error) {
+	return webApp{app: app}, nil
 }
 
 func (wa webApp) ServiceCallback(w http.ResponseWriter, r *http.Request) {
@@ -194,7 +189,7 @@ func (wa webApp) ServiceCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//Get userID from context
-	userID, err := server.GetUserID(ctx)
+	userInfo, err := server.GetUserInfo(ctx)
 	if err != nil {
 		e := errors.Wrap(err, "Unable to retrieve userID")
 		wa.app.Error(ctx, e)
@@ -202,7 +197,7 @@ func (wa webApp) ServiceCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accounts, err := wa.app.AssociatedServiceAccounts(ctx, userID, serviceName)
+	accounts, err := wa.app.AssociatedServiceAccounts(ctx, userInfo.ID(), serviceName)
 	if err != nil {
 		e := errors.Wrap(err, "AssociatedServiceAccounts failed")
 		wa.app.Error(ctx, e)
@@ -211,7 +206,7 @@ func (wa webApp) ServiceCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(accounts) > 0 {
 		//Redirect to the status page
-		url := fmt.Sprintf("/pages/users/%s/accounts/%d", userID, accounts[len(accounts)-1].ID)
+		url := fmt.Sprintf("/pages/users/%s/accounts/%d", userInfo.ID(), accounts[len(accounts)-1].ID)
 		wa.app.Infof(ctx, "Redirecting to %s", url)
 		http.Redirect(w, r, url, http.StatusFound)
 	} else {
@@ -229,7 +224,7 @@ func (wa webApp) ServiceRegister(w http.ResponseWriter, r *http.Request) {
 	serviceName := server.Param(r, "serviceName")
 
 	//Get userID from context
-	userID, err := server.GetUserID(ctx)
+	userInfo, err := server.GetUserInfo(ctx)
 	if err != nil {
 		e := errors.Wrap(err, "Unable to retrieve userID")
 		wa.app.Error(ctx, e)
@@ -237,7 +232,7 @@ func (wa webApp) ServiceRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accounts, err := wa.app.AssociatedServiceAccounts(ctx, userID, serviceName)
+	accounts, err := wa.app.AssociatedServiceAccounts(ctx, userInfo.ID(), serviceName)
 	if err != nil {
 		e := errors.Wrap(err, "GetServiceToken failed")
 		wa.app.Error(ctx, e)
@@ -260,7 +255,7 @@ func (wa webApp) ServiceRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//Redirect to the status page
-	url := fmt.Sprintf("/pages/users/%s/accounts/%d", userID, accounts[0].ID)
+	url := fmt.Sprintf("/pages/users/%s/accounts/%d", userInfo.ID(), accounts[0].ID)
 	wa.app.Infof(ctx, "Redirecting to %s", url)
 	http.Redirect(w, r, url, http.StatusFound)
 }
