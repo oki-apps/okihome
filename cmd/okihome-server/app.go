@@ -301,7 +301,7 @@ func (wa webApp) AccountStatus(w http.ResponseWriter, r *http.Request) {
 func (wa webApp) GetVersion(req *http.Request) (interface{}, error) {
 	return struct {
 		Version string `json:"version"`
-	}{Version: "0.7"}, nil
+	}{Version: "0.8-beta"}, nil
 }
 
 func (wa webApp) GetServices(req *http.Request) (interface{}, error) {
