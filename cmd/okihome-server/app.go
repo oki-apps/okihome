@@ -26,11 +26,10 @@ import (
 )
 
 type config struct {
-	StaticFileDir string
-	Server        server.Config
-	Postgresql    *postgresql.Config
-	Gmail         *gmail.Config
-	Outlook       *outlook.Config
+	Server     server.Config
+	Postgresql *postgresql.Config
+	Gmail      *gmail.Config
+	Outlook    *outlook.Config
 }
 
 func readConfig() config {
@@ -139,11 +138,6 @@ func main() {
 	s.Private(server.NewJSONRoute("GET", "/api/users/{userID}/accounts/{accountID}/emails", webApp.GetEmails))
 
 	s.Private(server.NewJSONRoute("POST", "/api/preview", webApp.Preview))
-
-	s.Public(server.NewStaticFilesRoute("/app", http.Dir(cfg.StaticFileDir)))
-
-	s.Public(server.NewRedirectRoute("/app", "/app/"))
-	s.Public(server.NewRedirectRoute("/", "/app/"))
 
 	//Start web app
 	if err := s.Run(); err != nil {
