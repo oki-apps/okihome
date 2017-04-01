@@ -13,12 +13,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+//New creates a new Server with all the required endpoints registered
 func New(app *okihome.App, cfg server.Config) (*server.Server, error) {
 
-	webApp, err := newWebApp(app)
-	if err != nil {
-		return nil, err
-	}
+	webApp := webApp{app: app}
 
 	//Server
 	s, err := server.New(cfg)
@@ -72,10 +70,6 @@ func (e invalidEntry) IsNotFound() bool {
 
 type webApp struct {
 	app *okihome.App
-}
-
-func newWebApp(app *okihome.App) (webApp, error) {
-	return webApp{app: app}, nil
 }
 
 func (wa webApp) ServiceCallback(w http.ResponseWriter, r *http.Request) {
