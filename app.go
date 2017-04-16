@@ -5,12 +5,12 @@
 package okihome
 
 import (
+	"context"
 	"fmt"
 	"time"
 
 	"github.com/mmcdole/gofeed"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 
 	"github.com/oki-apps/okihome/api"
