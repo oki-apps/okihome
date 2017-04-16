@@ -24,35 +24,52 @@ func New(app *okihome.App, cfg server.Config) (*server.Server, error) {
 		return nil, err
 	}
 
-	s.Public(server.NewJSONRoute("GET", "/api/version", webApp.GetVersion))
+	private, err := server.AuthenticatedFilter(cfg.OpenIDConnectIssuer)
+	if err != nil {
+		return nil, err
+	}
+	privateJSON := func(f func(r *http.Request) (interface{}, error)) http.Handler {
+		return private(server.JSONHandler(f))
+	}
+	registerPublicAPI := func(method, path string, h func(r *http.Request) (interface{}, error)) {
+		s.Router().Handle(path, server.JSONHandler(h)).Methods(method)
+	}
+	registerPrivateAPI := func(method, path string, h func(r *http.Request) (interface{}, error)) {
+		s.Router().Handle(path, privateJSON(h)).Methods(method)
+	}
+	registerPrivatePage := func(method, path string, h func(w http.ResponseWriter, r *http.Request)) {
+		s.Router().Handle(path, private(http.HandlerFunc(h))).Methods(method)
+	}
 
-	s.Private(server.NewJSONRoute("GET", "/api/users/{userID}", webApp.GetUser))
+	registerPublicAPI("GET", "/api/version", webApp.GetVersion)
 
-	s.Private(server.NewRouteFunc("GET", "/pages/services/{serviceName}/callback", webApp.ServiceCallback))
-	s.Private(server.NewRouteFunc("GET", "/pages/services/{serviceName}/register", webApp.ServiceRegister))
-	s.Private(server.NewRouteFunc("GET", "/pages/users/{userID}/accounts/{accountID}", webApp.AccountStatus))
+	registerPrivateAPI("GET", "/api/users/{userID}", webApp.GetUser)
 
-	s.Private(server.NewJSONRoute("GET", "/api/services", webApp.GetServices))
+	registerPrivatePage("GET", "/pages/services/{serviceName}/callback", webApp.ServiceCallback)
+	registerPrivatePage("GET", "/pages/services/{serviceName}/register", webApp.ServiceRegister)
+	registerPrivatePage("GET", "/pages/users/{userID}/accounts/{accountID}", webApp.AccountStatus)
 
-	s.Private(server.NewJSONRoute("POST", "/api/tabs", webApp.NewTab))
-	s.Private(server.NewJSONRoute("GET", "/api/tabs/{tabID}", webApp.GetTab))
-	s.Private(server.NewJSONRoute("POST", "/api/tabs/{tabID}", webApp.EditTab))
-	s.Private(server.NewJSONRoute("DELETE", "/api/tabs/{tabID}", webApp.DeleteTab))
+	registerPrivateAPI("GET", "/api/services", webApp.GetServices)
 
-	s.Private(server.NewJSONRoute("POST", "/api/tabs/{tabID}/widgets", webApp.NewWidget))
-	s.Private(server.NewJSONRoute("POST", "/api/tabs/{tabID}/widgets/{widgetID}", webApp.EditWidget))
-	s.Private(server.NewJSONRoute("DELETE", "/api/tabs/{tabID}/widgets/{widgetID}", webApp.DeleteWidget))
-	s.Private(server.NewJSONRoute("POST", "/api/tabs/{tabID}/layout", webApp.UpdateLayout))
+	registerPrivateAPI("POST", "/api/tabs", webApp.NewTab)
+	registerPrivateAPI("GET", "/api/tabs/{tabID}", webApp.GetTab)
+	registerPrivateAPI("POST", "/api/tabs/{tabID}", webApp.EditTab)
+	registerPrivateAPI("DELETE", "/api/tabs/{tabID}", webApp.DeleteTab)
 
-	s.Private(server.NewJSONRoute("GET", "/api/users/{userID}/feeds/{feedID}/items", webApp.GetFeedItems))
-	s.Private(server.NewJSONRoute("POST", "/api/users/{userID}/feeds/{feedID}", webApp.MarkAsRead))
+	registerPrivateAPI("POST", "/api/tabs/{tabID}/widgets", webApp.NewWidget)
+	registerPrivateAPI("POST", "/api/tabs/{tabID}/widgets/{widgetID}", webApp.EditWidget)
+	registerPrivateAPI("DELETE", "/api/tabs/{tabID}/widgets/{widgetID}", webApp.DeleteWidget)
+	registerPrivateAPI("POST", "/api/tabs/{tabID}/layout", webApp.UpdateLayout)
 
-	s.Private(server.NewJSONRoute("GET", "/api/users/{userID}/accounts", webApp.GetAssociatedAccounts))
-	s.Private(server.NewJSONRoute("DELETE", "/api/users/{userID}/accounts/{accountID}", webApp.RevokeAccount))
+	registerPrivateAPI("GET", "/api/users/{userID}/feeds/{feedID}/items", webApp.GetFeedItems)
+	registerPrivateAPI("POST", "/api/users/{userID}/feeds/{feedID}", webApp.MarkAsRead)
 
-	s.Private(server.NewJSONRoute("GET", "/api/users/{userID}/accounts/{accountID}/emails", webApp.GetEmails))
+	registerPrivateAPI("GET", "/api/users/{userID}/accounts", webApp.GetAssociatedAccounts)
+	registerPrivateAPI("DELETE", "/api/users/{userID}/accounts/{accountID}", webApp.RevokeAccount)
 
-	s.Private(server.NewJSONRoute("POST", "/api/preview", webApp.Preview))
+	registerPrivateAPI("GET", "/api/users/{userID}/accounts/{accountID}/emails", webApp.GetEmails)
+
+	registerPrivateAPI("POST", "/api/preview", webApp.Preview)
 
 	return s, nil
 }
