@@ -1,8 +1,8 @@
-// Copyright 2016 Simon HEGE. All rights reserved.
+// Copyright 2017 Simon HEGE. All rights reserved.
 // Use of this source code is governed by a MIT-style
 // license that can be found in the LICENSE file.
 
-package postgresql
+package sqlite
 
 import (
 	"context"
@@ -20,13 +20,13 @@ import (
 	"github.com/oki-apps/okihome/api"
 )
 
-//Config is the configuration to access the PostgreSQL database
+//Config is the configuration to access the SQLite database
 type Config struct {
 	DriverName       string
 	ConnectionString string
 }
 
-//New creates a new repository that stores data in a PostgreSQL database
+//New creates a new repository that stores data in a SQLite database
 func New(cfg Config) (api.Repository, error) {
 
 	db, err := sqlx.Connect(cfg.DriverName, cfg.ConnectionString)
@@ -103,7 +103,7 @@ func (r *repo) GetUser(ctx context.Context, userID string) (api.User, error) {
 	var u api.User
 	err := sqlx.Get(
 		r.Queryer(), &u,
-		"SELECT id, display_name, email, isadmin FROM okihome.t_user WHERE id=$1",
+		"SELECT id, display_name, email, isadmin FROM t_user WHERE id=$1",
 		userID)
 
 	if err != nil {
@@ -117,7 +117,7 @@ func (r *repo) GetUser(ctx context.Context, userID string) (api.User, error) {
 func (r *repo) StoreUser(ctx context.Context, user *api.User) error {
 
 	_, err := r.Execer().Exec(
-		"INSERT INTO okihome.t_user(id,display_name,email,isadmin) VALUES ($1,$2,$3,$4)",
+		"INSERT INTO t_user(id,display_name,email,isadmin) VALUES ($1,$2,$3,$4)",
 		user.UserID, user.DisplayName, user.Email, user.IsAdmin)
 	if err != nil {
 		return errors.Wrap(err, "Inserting user failed")
@@ -133,8 +133,8 @@ func (r *repo) GetTabs(ctx context.Context, userID string) ([]api.TabSummary, er
 	err := sqlx.Select(
 		r.Queryer(), &tabs,
 		`SELECT t_tab.id, t_tab.title 
-FROM okihome.t_tab 
-JOIN okihome.tj_tabaccess ON t_tab.id = tj_tabaccess.tab_id 
+FROM t_tab 
+JOIN tj_tabaccess ON t_tab.id = tj_tabaccess.tab_id 
 WHERE tj_tabaccess.user_id=$1`,
 		userID)
 
@@ -149,7 +149,7 @@ func (r *repo) IsTabAccessAllowed(ctx context.Context, userID string, tabID int6
 	var count int64
 	err := sqlx.Get(
 		r.Queryer(), &count,
-		`SELECT count(*) FROM okihome.tj_tabaccess WHERE user_id=$1 AND tab_id=$2`,
+		`SELECT count(*) FROM tj_tabaccess WHERE user_id=$1 AND tab_id=$2`,
 		userID, tabID)
 
 	if err != nil {
@@ -166,7 +166,7 @@ func (r *repo) IsTabAccessAllowed(ctx context.Context, userID string, tabID int6
 func (r *repo) AllowTabAccess(ctx context.Context, userID string, tabID int64) error {
 
 	_, err := r.Execer().Exec(
-		"INSERT INTO okihome.tj_tabaccess(user_id,tab_id) VALUES ($1,$2)",
+		"INSERT INTO tj_tabaccess(user_id,tab_id) VALUES ($1,$2)",
 		userID, tabID)
 
 	if err != nil {
@@ -186,7 +186,7 @@ func (r *repo) GetTab(ctx context.Context, tabID int64) (api.Tab, error) {
 	//Get the tab
 	err := sqlx.Get(
 		r.Queryer(), &t,
-		`SELECT id, title, layout FROM okihome.t_tab WHERE id=$1`,
+		`SELECT id, title, layout FROM t_tab WHERE id=$1`,
 		tabID)
 
 	if err != nil {
@@ -242,19 +242,22 @@ func (r *repo) StoreTab(ctx context.Context, tab *api.Tab) error {
 	if tab.ID > 0 {
 		//Update
 		_, err := r.Execer().Exec(
-			"UPDATE okihome.t_tab SET title=$1, layout=$2 WHERE id=$3",
+			"UPDATE t_tab SET title=$1, layout=$2 WHERE id=$3",
 			tab.Title, layout, tab.ID)
 		if err != nil {
 			return errors.Wrap(err, "Updating tab failed "+layout)
 		}
 	} else {
 		//Insert
-		err := sqlx.Get(
-			r.Queryer(), &tab.ID,
-			"INSERT INTO okihome.t_tab(title,layout) VALUES ($1,$2) RETURNING id",
+		res, err := r.Execer().Exec(
+			"INSERT INTO t_tab(title,layout) VALUES ($1,$2)",
 			tab.Title, layout)
 		if err != nil {
 			return errors.Wrap(err, "Inserting tab failed")
+		}
+		tab.ID, err = res.LastInsertId()
+		if err != nil {
+			return errors.Wrap(err, "Retreieving inserted tab ID failed")
 		}
 	}
 
@@ -264,7 +267,7 @@ func (r *repo) StoreTab(ctx context.Context, tab *api.Tab) error {
 func (r *repo) DeleteTab(ctx context.Context, tabID int64) error {
 
 	_, err := r.Execer().Exec(
-		"DELETE FROM okihome.t_tab WHERE id=$1",
+		"DELETE FROM t_tab WHERE id=$1",
 		tabID)
 	if err != nil {
 		return errors.Wrap(err, "Removing tab failed")
@@ -280,7 +283,7 @@ func (r *repo) GetWidget(ctx context.Context, tabID int64, widgetID int64) (api.
 	}
 	err := sqlx.Get(
 		r.Queryer(), &w,
-		`SELECT id, type, config as cfg FROM okihome.t_widget WHERE id=$1 and tab_id=$2`,
+		`SELECT id, type, config as cfg FROM t_widget WHERE id=$1 and tab_id=$2`,
 		widgetID, tabID)
 
 	//Create empty config based on type
@@ -320,19 +323,22 @@ func (r *repo) StoreWidget(ctx context.Context, tabID int64, widget *api.Widget)
 	if widget.ID > 0 {
 		//Update
 		_, err := r.Execer().Exec(
-			"UPDATE okihome.t_widget SET type=$1,config=$2 WHERE id=$3 AND tab_id=$4",
+			"UPDATE t_widget SET type=$1,config=$2 WHERE id=$3 AND tab_id=$4",
 			widget.Type, configJSON, widget.ID, tabID)
 		if err != nil {
 			return errors.Wrap(err, "Updating widget failed")
 		}
 	} else {
 		//Insert
-		err := sqlx.Get(
-			r.Queryer(), &widget.ID,
-			"INSERT INTO okihome.t_widget(type,config,tab_id) VALUES ($1,$2,$3) RETURNING id",
+		res, err := r.Execer().Exec(
+			"INSERT INTO t_widget(type,config,tab_id) VALUES ($1,$2,$3)",
 			widget.Type, configJSON, tabID)
 		if err != nil {
 			return errors.Wrap(err, "Inserting widget failed")
+		}
+		widget.ID, err = res.LastInsertId()
+		if err != nil {
+			return errors.Wrap(err, "Retrieving last inserted widget ID failed")
 		}
 	}
 
@@ -342,7 +348,7 @@ func (r *repo) StoreWidget(ctx context.Context, tabID int64, widget *api.Widget)
 func (r *repo) DeleteWidget(ctx context.Context, tabID int64, widgetID int64) error {
 
 	_, err := r.Execer().Exec(
-		"DELETE FROM okihome.t_widget WHERE id=$1 AND tab_id=$2",
+		"DELETE FROM t_widget WHERE id=$1 AND tab_id=$2",
 		widgetID, tabID)
 	if err != nil {
 		return errors.Wrap(err, "Removing widget failed")
@@ -437,7 +443,7 @@ func (r *repo) GetOrCreateFeedID(ctx context.Context, URL string) (int64, error)
 	var feedID int64
 	err := sqlx.Get(
 		r.Queryer(), &feedID,
-		`SELECT id FROM okihome.t_feed WHERE url=$1`,
+		`SELECT id FROM t_feed WHERE url=$1`,
 		URL)
 
 	if err == nil {
@@ -448,13 +454,15 @@ func (r *repo) GetOrCreateFeedID(ctx context.Context, URL string) (int64, error)
 		return 0, errors.Wrap(err, "Getting feed failed")
 	}
 
-	err = sqlx.Get(
-		r.Queryer(), &feedID,
-		"INSERT INTO okihome.t_feed(url,next_retrieval) VALUES ($1,now()) RETURNING id",
+	res, err := r.Execer().Exec(
+		"INSERT INTO t_feed(url,next_retrieval) VALUES ($1,now())",
 		URL)
-
 	if err != nil {
-		return 0, errors.Wrap(err, "Inserting tab failed")
+		return 0, errors.Wrap(err, "Inserting feed failed")
+	}
+	feedID, err = res.LastInsertId()
+	if err != nil {
+		return 0, errors.Wrap(err, "Retreiving last inserted feed ID failed")
 	}
 
 	return feedID, nil
@@ -473,7 +481,7 @@ func (r *repo) GetFeed(ctx context.Context, feedID int64) (api.Feed, error) {
 	//Get the feed
 	err := sqlx.Get(
 		r.Queryer(), &feed,
-		`SELECT id, url, next_retrieval, title FROM okihome.t_feed WHERE id=$1`,
+		`SELECT id, url, next_retrieval, title FROM t_feed WHERE id=$1`,
 		feedID)
 
 	if err != nil {
@@ -500,7 +508,7 @@ func (r *repo) GetFeedItems(ctx context.Context, feedID int64) ([]api.FeedItem, 
 	//Get the feed
 	err := sqlx.Select(
 		r.Queryer(), &items,
-		`SELECT guid, title, published, link FROM okihome.t_feeditem WHERE feed_id=$1 ORDER BY published DESC`,
+		`SELECT guid, title, published, link FROM t_feeditem WHERE feed_id=$1 ORDER BY published DESC`,
 		feedID)
 
 	if err != nil {
@@ -514,14 +522,14 @@ func (r *repo) StoreFeed(ctx context.Context, feed *api.Feed, feedItems []api.Fe
 	if feed.ID > 0 {
 		//Update
 		_, err := r.Execer().Exec(
-			"UPDATE okihome.t_feed SET url=$1, next_retrieval=$2, title=$3 WHERE id=$4",
+			"UPDATE t_feed SET url=$1, next_retrieval=$2, title=$3 WHERE id=$4",
 			feed.URL, feed.NextRetrieval, feed.Title, feed.ID)
 		if err != nil {
 			return errors.Wrap(err, "Updating feed failed")
 		}
 
 		_, err = r.Execer().Exec(
-			"DELETE FROM okihome.t_feeditem WHERE feed_id=$1",
+			"DELETE FROM t_feeditem WHERE feed_id=$1",
 			feed.ID)
 		if err != nil {
 			return errors.Wrap(err, "Cleaning existing feed items failed")
@@ -529,13 +537,15 @@ func (r *repo) StoreFeed(ctx context.Context, feed *api.Feed, feedItems []api.Fe
 
 	} else {
 		//Insert
-
-		err := sqlx.Get(
-			r.Queryer(), &feed.ID,
-			"INSERT INTO okihome.t_feed(url, next_retrieval, title) VALUES ($1,$2,$3) RETURNING id",
+		res, err := r.Execer().Exec(
+			"INSERT INTO t_feed(url, next_retrieval, title) VALUES ($1,$2,$3)",
 			feed.URL, feed.NextRetrieval, feed.Title)
 		if err != nil {
 			return errors.Wrap(err, "Inserting feed failed")
+		}
+		feed.ID, err = res.LastInsertId()
+		if err != nil {
+			return errors.Wrap(err, "Retrieving last inserted feed ID failed")
 		}
 	}
 
@@ -543,7 +553,7 @@ func (r *repo) StoreFeed(ctx context.Context, feed *api.Feed, feedItems []api.Fe
 	for _, item := range feedItems {
 
 		_, err := r.Execer().Exec(
-			"INSERT INTO okihome.t_feeditem (feed_id, guid, title, published, link) VALUES ($1,$2,$3,$4,$5)",
+			"INSERT INTO t_feeditem (feed_id, guid, title, published, link) VALUES ($1,$2,$3,$4,$5)",
 			feed.ID, item.GUID, item.Title, item.Published, item.Link)
 		if err != nil {
 			return errors.Wrap(err, "Cleaning existing feed items failed")
@@ -562,7 +572,7 @@ func (r *repo) AreItemsRead(ctx context.Context, userID string, feedID int64, gu
 		read := false
 		err := sqlx.Get(
 			r.Queryer(), &read,
-			"SELECT read FROM okihome.tj_feeditem_user WHERE user_id=$1 AND feed_id=$2 AND guid=$3",
+			"SELECT read FROM tj_feeditem_user WHERE user_id=$1 AND feed_id=$2 AND guid=$3",
 			userID, feedID, guid)
 		if err != nil && err != sql.ErrNoRows {
 			return nil, errors.Wrap(err, "Getting read status failed")
@@ -577,7 +587,7 @@ func (r *repo) SetItemRead(ctx context.Context, userID string, feedID int64, gui
 
 	err := sqlx.Get(
 		r.Queryer(), &read,
-		"SELECT read FROM okihome.tj_feeditem_user WHERE user_id=$1 AND feed_id=$2 AND guid=$3",
+		"SELECT read FROM tj_feeditem_user WHERE user_id=$1 AND feed_id=$2 AND guid=$3",
 		userID, feedID, guid)
 	if err != nil && err != sql.ErrNoRows {
 		return errors.Wrap(err, "Getting read status failed")
@@ -585,14 +595,14 @@ func (r *repo) SetItemRead(ctx context.Context, userID string, feedID int64, gui
 
 	if err == sql.ErrNoRows {
 		_, err := r.Execer().Exec(
-			"INSERT INTO okihome.tj_feeditem_user (user_id, feed_id, guid, read) VALUES ($1,$2,$3,$4)",
+			"INSERT INTO tj_feeditem_user (user_id, feed_id, guid, read) VALUES ($1,$2,$3,$4)",
 			userID, feedID, guid, read)
 		if err != nil {
 			return errors.Wrap(err, "Inserting read status failed")
 		}
 	} else {
 		_, err := r.Execer().Exec(
-			"UPDATE okihome.tj_feeditem_user SET read=$4 WHERE user_id=$1 AND feed_id=$2 AND guid=$3",
+			"UPDATE tj_feeditem_user SET read=$4 WHERE user_id=$1 AND feed_id=$2 AND guid=$3",
 			userID, feedID, guid, read)
 		if err != nil {
 			return errors.Wrap(err, "Updating read status failed")
@@ -611,7 +621,7 @@ func (r *repo) GetAccount(ctx context.Context, userID string, accountID int64) (
 	err := sqlx.Get(
 		r.Queryer(), &acc,
 		`SELECT t_account.id, t_account.provider, t_account.account_id, t_account.token as tokenjson
-FROM okihome.t_account 
+FROM t_account 
 WHERE t_account.id=$1 AND t_account.user_id=$2`,
 		accountID, userID)
 
@@ -637,7 +647,7 @@ func (r *repo) GetAccounts(ctx context.Context, userID string) ([]api.ExternalAc
 	err := sqlx.Select(
 		r.Queryer(), &accounts,
 		`SELECT t_account.id, t_account.provider, t_account.account_id, t_account.token as tokenjson
-FROM okihome.t_account 
+FROM t_account 
 WHERE t_account.user_id=$1`,
 		userID)
 
@@ -662,7 +672,7 @@ WHERE t_account.user_id=$1`,
 func (r *repo) DeleteAccount(ctx context.Context, userID string, accountID int64) error {
 
 	_, err := r.Execer().Exec(
-		"DELETE FROM okihome.t_account WHERE id=$1 AND t_account.user_id=$2",
+		"DELETE FROM t_account WHERE id=$1 AND t_account.user_id=$2",
 		accountID, userID)
 	if err != nil {
 		return errors.Wrap(err, "Removing account failed")
@@ -682,7 +692,7 @@ func (r *repo) StoreAccount(ctx context.Context, userID string, account *api.Ext
 	if account.ID > 0 {
 		//Update
 		_, err := r.Execer().Exec(
-			"UPDATE okihome.t_account SET provider=$1, account_id=$2, token=$3 WHERE id=$4 AND user_id=$5",
+			"UPDATE t_account SET provider=$1, account_id=$2, token=$3 WHERE id=$4 AND user_id=$5",
 			account.ProviderName, account.AccountID, tokenJSON, account.ID, userID)
 		if err != nil {
 			return errors.Wrap(err, "Updating account failed")
@@ -690,12 +700,15 @@ func (r *repo) StoreAccount(ctx context.Context, userID string, account *api.Ext
 
 	} else {
 		//Insert
-		err := sqlx.Get(
-			r.Queryer(), &account.ID,
-			"INSERT INTO okihome.t_account(provider, account_id, token, user_id) VALUES ($1,$2,$3,$4) RETURNING id",
+		res, err := r.Execer().Exec(
+			"INSERT INTO t_account(provider, account_id, token, user_id) VALUES ($1,$2,$3,$4)",
 			account.ProviderName, account.AccountID, tokenJSON, userID)
 		if err != nil {
 			return errors.Wrap(err, "Inserting account failed")
+		}
+		account.ID, err = res.LastInsertId()
+		if err != nil {
+			return errors.Wrap(err, "Retrieving last inserted account ID failed")
 		}
 	}
 
@@ -707,7 +720,7 @@ func (r *repo) GetUserFromTemporaryCode(ctx context.Context, serviceName string,
 	var userID string
 	err := sqlx.Get(
 		r.Queryer(), &userID,
-		"SELECT user_id FROM okihome.t_temporarycode WHERE provider=$1 AND code=$2",
+		"SELECT user_id FROM t_temporarycode WHERE provider=$1 AND code=$2",
 		serviceName, code)
 
 	if err != nil {
@@ -719,7 +732,7 @@ func (r *repo) GetUserFromTemporaryCode(ctx context.Context, serviceName string,
 func (r *repo) StoreTemporaryCode(ctx context.Context, userID string, serviceName string, code string) error {
 
 	_, err := r.Execer().Exec(
-		"INSERT INTO okihome.t_temporarycode(user_id, provider, code) VALUES ($1,$2,$3)",
+		"INSERT INTO t_temporarycode(user_id, provider, code) VALUES ($1,$2,$3)",
 		userID, serviceName, code)
 
 	if err != nil {
@@ -731,7 +744,7 @@ func (r *repo) StoreTemporaryCode(ctx context.Context, userID string, serviceNam
 func (r *repo) DeleteTemporaryCode(ctx context.Context, userID string, serviceName string) error {
 
 	_, err := r.Execer().Exec(
-		"DELETE FROM okihome.t_temporarycode WHERE user_id=$1 AND provider=$2",
+		"DELETE FROM t_temporarycode WHERE user_id=$1 AND provider=$2",
 		userID, serviceName)
 
 	if err != nil {
@@ -747,7 +760,7 @@ func (r *repo) GetEmailItem(ctx context.Context, account api.ExternalAccount, gu
 	err := sqlx.Get(
 		r.Queryer(), &emailItem,
 		`SELECT guid, title, published, link, sender, snippet, read
-FROM okihome.t_emailitem WHERE account_id=$1 AND guid=$2 AND version>=$3`,
+FROM t_emailitem WHERE account_id=$1 AND guid=$2 AND version>=$3`,
 		account.ID, guid, minVersion)
 
 	if err != nil {
@@ -766,7 +779,7 @@ func (r *repo) StoreEmailItem(ctx context.Context, account api.ExternalAccount, 
 	err := sqlx.Get(
 		r.Queryer(), &currentVersion,
 		`SELECT version
-FROM okihome.t_emailitem WHERE account_id=$1 AND guid=$2`,
+FROM t_emailitem WHERE account_id=$1 AND guid=$2`,
 		account.ID, item.GUID)
 	if err != nil && err != sql.ErrNoRows {
 		return errors.Wrap(err, "Getting current version failed")
@@ -775,7 +788,7 @@ FROM okihome.t_emailitem WHERE account_id=$1 AND guid=$2`,
 	if err == sql.ErrNoRows {
 
 		_, err := r.Execer().Exec(
-			`INSERT INTO okihome.t_emailitem(account_id, guid, title, published, link, 
+			`INSERT INTO t_emailitem(account_id, guid, title, published, link, 
 sender, snippet, read, version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
 			account.ID, item.GUID, item.Title, item.Published, item.Link,
 			item.From, item.Snippet, item.Read, version)
@@ -787,7 +800,7 @@ sender, snippet, read, version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
 	} else if currentVersion < version {
 
 		_, err := r.Execer().Exec(
-			`UPDATE okihome.t_emailitem SET title=$3, published=$4, link=$5, 
+			`UPDATE t_emailitem SET title=$3, published=$4, link=$5, 
 sender=$6, snippet=$7, read=$8, version=$9
 WHERE account_id=$1 AND guid=$2`,
 			account.ID, item.GUID, item.Title, item.Published, item.Link,

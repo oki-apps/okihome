@@ -11,12 +11,15 @@ import (
 	"os"
 
 	_ "github.com/lib/pq"
+	_ "github.com/mattn/go-sqlite3"
+
 	"github.com/oki-apps/okihome"
 	"github.com/oki-apps/okihome/api"
 	"github.com/oki-apps/okihome/logInteractor/console"
 	"github.com/oki-apps/okihome/providers/gmail"
 	"github.com/oki-apps/okihome/providers/outlook"
 	"github.com/oki-apps/okihome/repository/postgresql"
+	"github.com/oki-apps/okihome/repository/sqlite"
 	okihomeServer "github.com/oki-apps/okihome/server"
 	"github.com/oki-apps/okihome/userInteractor/contextUser"
 	"github.com/oki-apps/server"
@@ -25,6 +28,7 @@ import (
 type config struct {
 	Server     server.Config
 	Postgresql *postgresql.Config
+	SQLite     *sqlite.Config
 	Gmail      *gmail.Config
 	Outlook    *outlook.Config
 }
@@ -69,8 +73,15 @@ func main() {
 			fmt.Println(err)
 			os.Exit(1)
 		}
+	} else if cfg.SQLite != nil {
+		var err error
+		repo, err = sqlite.New(*cfg.SQLite)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
 	} else {
-		fmt.Println("Missing PostgreSQL configuration")
+		fmt.Println("Missing datastore configuration")
 		os.Exit(1)
 	}
 
