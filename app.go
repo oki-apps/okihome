@@ -322,20 +322,15 @@ func (app App) NewTab(ctx context.Context, tabDesc api.TabSummary) (api.Tab, err
 		[]api.Widget{},
 	}
 
-	err = app.repository.RunInTransaction(ctx, func(repo api.Repository) error {
+	err = app.repository.StoreTab(ctx, &tab)
+	if err != nil {
+		return api.Tab{}, errors.Wrap(err, "saving tab in datastore failed")
+	}
 
-		err := app.repository.StoreTab(ctx, &tab)
-		if err != nil {
-			return errors.Wrap(err, "saving tab in datastore failed")
-		}
-
-		err = app.repository.AllowTabAccess(ctx, userID, tab.ID)
-		if err != nil {
-			return errors.Wrap(err, "saving tab access rules in datastore failed")
-		}
-
-		return nil
-	})
+	err = app.repository.AllowTabAccess(ctx, userID, tab.ID)
+	if err != nil {
+		return api.Tab{}, errors.Wrap(err, "saving tab access rules in datastore failed")
+	}
 
 	return tab, nil
 }
@@ -453,46 +448,14 @@ func (app App) DeleteWidget(ctx context.Context, tabID int64, widgetID int64) (b
 	app.Infof(ctx, "Removing widget %d %d", tabID, widgetID)
 
 	//Update the tab layout
-	found := false
-	err = app.repository.RunInTransaction(ctx, func(repo api.Repository) error {
-
-		tab, err := app.repository.GetTab(ctx, tabID)
-		if err != nil {
-			return errors.Wrap(err, "retrieving tab from datastore failed")
-		}
-
-		iFound, jFound := 0, 0
-		for i, column := range tab.Widgets {
-			for j, w := range column {
-				if w.ID == widgetID {
-					iFound = i
-					jFound = j
-					found = true
-				}
-			}
-		}
-
-		if !found {
-			return errors.New("widget not found")
-		}
-
-		tab.Widgets[iFound] = append(tab.Widgets[iFound][:jFound], tab.Widgets[iFound][jFound+1:]...)
-
-		err = app.repository.StoreTab(ctx, &tab)
-		if err != nil {
-			return errors.Wrap(err, "saving tab in datastore failed")
-		}
-
-		err = app.repository.DeleteWidget(ctx, tabID, widgetID)
-		if err != nil {
-			return errors.Wrap(err, "removing widget from datastore failed")
-		}
-
-		return nil
-	})
-
+	err = app.repository.DeleteWidgetFromTab(ctx, tabID, widgetID)
 	if err != nil {
-		return false, errors.Wrap(err, "deletion of widget failed") //TODO: more context
+		return false, errors.Wrap(err, "removing widget from tab failed")
+	}
+
+	err = app.repository.DeleteWidget(ctx, tabID, widgetID)
+	if err != nil {
+		return false, errors.Wrap(err, "removing widget from datastore failed")
 	}
 
 	return true, nil
@@ -556,7 +519,7 @@ func (app App) EditWidget(ctx context.Context, tabID int64, widgetID int64, newC
 
 }
 
-//UpdateLayout reorganises the content of a tab, based on th given widget id lists
+//UpdateLayout reorganises the content of a tab, based on the given widget id lists
 func (app App) UpdateLayout(ctx context.Context, tabID int64, layout [][]int64) ([][]int64, error) {
 
 	//Check that a user is logged
@@ -574,51 +537,9 @@ func (app App) UpdateLayout(ctx context.Context, tabID int64, layout [][]int64) 
 	}
 
 	//Update the tab layout
-	err = app.repository.RunInTransaction(ctx, func(repo api.Repository) error {
-
-		tab, err := app.repository.GetTab(ctx, tabID)
-		if err != nil {
-			return errors.Wrap(err, "retrieving tab from datastore failed")
-		}
-
-		allWidgets := make(map[int64]api.Widget)
-		for _, column := range tab.Widgets {
-			for _, w := range column {
-				allWidgets[w.ID] = w
-			}
-		}
-
-		tab.Widgets = nil
-
-		for _, column := range layout {
-			newCol := []api.Widget{}
-
-			for _, widgetID := range column {
-				w, ok := allWidgets[widgetID]
-				if !ok {
-					return errors.New("Unable to find widget in tab")
-				}
-				newCol = append(newCol, w)
-				delete(allWidgets, widgetID)
-			}
-
-			tab.Widgets = append(tab.Widgets, newCol)
-		}
-
-		if len(allWidgets) > 0 {
-			return errors.New("Not all widgets used in new layout")
-		}
-
-		err = app.repository.StoreTab(ctx, &tab)
-		if err != nil {
-			return errors.Wrap(err, "saving tab in datastore failed")
-		}
-
-		return nil
-	})
-
+	err = app.repository.UpdateTabLayout(ctx, tabID, layout)
 	if err != nil {
-		return nil, errors.Wrap(err, "update of layout failed") //TODO: more context
+		return nil, errors.Wrap(err, "saving tab in datastore failed")
 	}
 
 	return layout, nil

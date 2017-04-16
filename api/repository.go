@@ -10,7 +10,7 @@ import (
 
 //Repository is the interface allowing usage of any data store for tabs, widgets, read flags and all other data.
 type Repository interface {
-	RunInTransaction(ctx context.Context, f func(repo Repository) error) error
+	//RunInTransaction(ctx context.Context, f func(repo Repository) error) error
 
 	IsNotFound(err error) bool
 
@@ -29,6 +29,9 @@ type Repository interface {
 	GetWidget(ctx context.Context, tabID int64, widgetID int64) (Widget, error)
 	StoreWidget(ctx context.Context, tabID int64, widget *Widget) error
 	DeleteWidget(ctx context.Context, tabID int64, widgetID int64) error
+
+	UpdateTabLayout(ctx context.Context, tabID int64, layout [][]int64) error
+	DeleteWidgetFromTab(ctx context.Context, tabID int64, widgetID int64) error
 
 	GetOrCreateFeedID(ctx context.Context, URL string) (int64, error)
 	GetFeed(ctx context.Context, feedID int64) (Feed, error)

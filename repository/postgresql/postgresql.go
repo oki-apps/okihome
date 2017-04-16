@@ -45,7 +45,7 @@ type repo struct {
 	Tx *sqlx.Tx
 }
 
-func (r *repo) RunInTransaction(ctx context.Context, f func(repo api.Repository) error) error {
+func (r *repo) runInTransaction(ctx context.Context, f func(repo api.Repository) error) error {
 
 	if r.Tx != nil {
 		return errors.New("Nested transactions are prohibited")
@@ -347,6 +347,88 @@ func (r *repo) DeleteWidget(ctx context.Context, tabID int64, widgetID int64) er
 		return errors.Wrap(err, "Removing widget failed")
 	}
 	return nil
+}
+
+func (r *repo) UpdateTabLayout(ctx context.Context, tabID int64, layout [][]int64) error {
+	return r.runInTransaction(ctx, func(repo api.Repository) error {
+
+		tab, err := repo.GetTab(ctx, tabID)
+		if err != nil {
+			return errors.Wrap(err, "retrieving tab from datastore failed")
+		}
+
+		allWidgets := make(map[int64]api.Widget)
+		for _, column := range tab.Widgets {
+			for _, w := range column {
+				allWidgets[w.ID] = w
+			}
+		}
+
+		tab.Widgets = nil
+
+		for _, column := range layout {
+			newCol := []api.Widget{}
+
+			for _, widgetID := range column {
+				w, ok := allWidgets[widgetID]
+				if !ok {
+					return errors.New("Unable to find widget in tab")
+				}
+				newCol = append(newCol, w)
+				delete(allWidgets, widgetID)
+			}
+
+			tab.Widgets = append(tab.Widgets, newCol)
+		}
+
+		if len(allWidgets) > 0 {
+			return errors.New("Not all widgets used in new layout")
+		}
+
+		err = repo.StoreTab(ctx, &tab)
+		if err != nil {
+			return errors.Wrap(err, "saving tab in datastore failed")
+		}
+
+		return nil
+	})
+}
+
+func (r *repo) DeleteWidgetFromTab(ctx context.Context, tabID int64, widgetID int64) error {
+
+	return r.runInTransaction(ctx, func(repo api.Repository) error {
+
+		found := false
+
+		tab, err := repo.GetTab(ctx, tabID)
+		if err != nil {
+			return errors.Wrap(err, "retrieving tab from datastore failed")
+		}
+
+		iFound, jFound := 0, 0
+		for i, column := range tab.Widgets {
+			for j, w := range column {
+				if w.ID == widgetID {
+					iFound = i
+					jFound = j
+					found = true
+				}
+			}
+		}
+
+		if !found {
+			return errors.New("widget not found")
+		}
+
+		tab.Widgets[iFound] = append(tab.Widgets[iFound][:jFound], tab.Widgets[iFound][jFound+1:]...)
+
+		err = repo.StoreTab(ctx, &tab)
+		if err != nil {
+			return errors.Wrap(err, "saving tab in datastore failed")
+		}
+
+		return nil
+	})
 }
 
 func (r *repo) GetOrCreateFeedID(ctx context.Context, URL string) (int64, error) {
