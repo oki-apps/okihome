@@ -71,6 +71,8 @@ func New(app *okihome.App, cfg server.Config) (*server.Server, error) {
 
 	registerPrivateAPI("POST", "/api/preview", webApp.Preview)
 
+	s.AllowCORS()
+
 	return s, nil
 }
 
