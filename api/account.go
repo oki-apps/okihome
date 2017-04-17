@@ -6,6 +6,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 
 	"golang.org/x/oauth2"
 )
@@ -84,4 +85,9 @@ type ExternalAccount struct {
 	ProviderName string        `json:"provider_name" db:"provider"`
 	AccountID    string        `json:"account_id" db:"account_id"`
 	Token        *oauth2.Token `json:"-" db:"token"`
+}
+
+//Key returns a unique key for the account
+func (a ExternalAccount) Key() string {
+	return fmt.Sprintf("%s-%s", a.ProviderName, a.AccountID)
 }

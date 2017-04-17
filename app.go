@@ -115,6 +115,186 @@ func (app App) User(ctx context.Context, userID string) (UserData, error) {
 	return data, nil
 }
 
+//BackupUser returns the configuration of a given user (used for backup and restore)
+func (app App) BackupUser(ctx context.Context, userID string) (api.Snapshot, error) {
+
+	//Check that a user is logged
+	loggedInUser, err := app.userInteractor.CurrentUser(ctx)
+	if err != nil {
+		return api.Snapshot{}, errors.Wrap(err, "retrieving current user failed")
+	}
+
+	//Check authorization
+	if userID != loggedInUser.ID() {
+		if !app.userInteractor.CurrentUserIsAdmin(ctx) {
+			return api.Snapshot{}, errors.Wrap(notAuthorized("access denied to user: "+userID), "access by "+loggedInUser.ID())
+		}
+	}
+
+	data := api.Snapshot{}
+
+	//Get the user in datastore
+	data.User, err = app.repository.GetUser(ctx, userID)
+	if err != nil {
+		return api.Snapshot{}, errors.Wrap(err, "retrieving user from datastore failed")
+	}
+
+	//Get the tabs
+	tabs, err := app.repository.GetTabs(ctx, userID)
+	if err != nil {
+		return api.Snapshot{}, errors.Wrap(err, "retrieving tab ids from datastore failed")
+	}
+
+	for _, t := range tabs {
+		tab, err := app.repository.GetTab(ctx, t.ID)
+		if err != nil {
+			return api.Snapshot{}, errors.Wrap(err, "retrieving tab from datastore failed")
+		}
+		data.Tabs = append(data.Tabs, tab)
+	}
+
+	//Get the feeds
+	feedIDs := make(map[int64]bool)
+	for _, t := range data.Tabs {
+		for _, col := range t.Widgets {
+			for _, w := range col {
+				if w.Type == api.WidgetFeedType {
+					cfg := w.Config.(api.ConfigFeed)
+
+					feedIDs[cfg.FeedID] = true
+				}
+			}
+		}
+	}
+	for feedID := range feedIDs {
+		feed, err := app.repository.GetFeed(ctx, feedID)
+		if err != nil {
+			return api.Snapshot{}, errors.Wrap(err, "retrieving feed from datastore failed")
+		}
+		data.Feeds = append(data.Feeds, feed)
+	}
+
+	//Get the accounts
+	data.Accounts, err = app.repository.GetAccounts(ctx, userID)
+	if err != nil {
+		return api.Snapshot{}, errors.Wrap(err, "retrieving accounts from datastore failed")
+	}
+
+	return data, nil
+}
+
+//RestoreUser restores the configuration of a given user (used for backup and restore)
+func (app App) RestoreUser(ctx context.Context, userID string, s api.Snapshot) error {
+
+	//Check that a user is logged
+	loggedInUser, err := app.userInteractor.CurrentUser(ctx)
+	if err != nil {
+		return errors.Wrap(err, "retrieving current user failed")
+	}
+
+	//Check authorization
+	if userID != loggedInUser.ID() {
+		if !app.userInteractor.CurrentUserIsAdmin(ctx) {
+			return errors.Wrap(notAuthorized("access denied to user: "+userID), "access by "+loggedInUser.ID())
+		}
+	}
+
+	//UserID should match
+	if userID != s.User.UserID {
+		return errors.New("User IDs do not match")
+	}
+
+	//No tabs defined for user to update
+	tabs, err := app.repository.GetTabs(ctx, userID)
+	if err != nil {
+		return errors.Wrap(err, "retrieving tab ids from datastore failed")
+	}
+	if len(tabs) > 0 {
+		return errors.New("Restore not possible due to existing tabs")
+	}
+
+	//Get account matching
+	accounts, err := app.repository.GetAccounts(ctx, userID)
+	if err != nil {
+		return errors.Wrap(err, "retrieving accounts from datastore failed")
+	}
+	existingAccounts := make(map[string]int64)
+	for _, a := range accounts {
+		existingAccounts[a.Key()] = a.ID
+	}
+	allAccounts := make(map[int64]int64)
+	for _, a := range s.Accounts {
+		existingID, ok := existingAccounts[a.Key()]
+		if !ok {
+			return errors.New("Restore not possible due to missing account: " + a.Key())
+		}
+		allAccounts[a.ID] = existingID
+	}
+
+	//Add all feeds and keep matching
+	allFeeds := make(map[int64]int64)
+	for _, f := range s.Feeds {
+		id, err := app.repository.GetOrCreateFeedID(ctx, f.URL)
+		if err != nil {
+			return errors.Wrap(err, "retrieving feed id from datastore failed")
+		}
+		allFeeds[f.ID] = id
+	}
+
+	//Create all tabs and add widgets
+	for _, t := range s.Tabs {
+
+		newTab, err := app.NewTab(ctx, t.TabSummary)
+		if err != nil {
+			return errors.Wrap(err, "creating tab failed")
+		}
+
+		for i, c := range t.Widgets {
+			for j, w := range c {
+
+				newWidget := w
+				newWidget.ID = 0
+
+				//Map account id/feed id in widget configs
+				switch newWidget.Type {
+				case api.WidgetFeedType:
+					cfg := newWidget.Config.(api.ConfigFeed)
+					var ok bool
+					cfg.FeedID, ok = allFeeds[cfg.FeedID]
+					if !ok {
+						return errors.New("Unknown feed ID")
+					}
+					newWidget.Config = cfg
+
+				case api.WidgetEmailType:
+					cfg := newWidget.Config.(api.ConfigEmail)
+					var ok bool
+					cfg.AccountID, ok = allAccounts[cfg.AccountID]
+					if !ok {
+						return errors.New("Unknown account ID")
+					}
+					newWidget.Config = cfg
+				}
+
+				//Store updated widget
+				err := app.repository.StoreWidget(ctx, newTab.ID, &newWidget)
+				if err != nil {
+					return errors.Wrap(err, "creating widget failed")
+				}
+
+				newTab.Widgets[i][j] = newWidget
+			}
+		}
+
+		err = app.repository.StoreTab(ctx, &newTab)
+		if err != nil {
+			return errors.Wrap(err, "creating tab layout failed")
+		}
+	}
+
+	return nil
+}
+
 //Services returns the list of all available providers
 func (app App) Services(ctx context.Context) ([]api.ProviderDescription, error) {
 

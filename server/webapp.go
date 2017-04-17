@@ -45,6 +45,9 @@ func New(app *okihome.App, cfg server.Config) (*server.Server, error) {
 
 	registerPrivateAPI("GET", "/api/users/{userID}", webApp.GetUser)
 
+	registerPrivateAPI("GET", "/api/users/{userID}/backup", webApp.BackupUser)
+	registerPrivateAPI("POST", "/api/users/{userID}/backup", webApp.RestoreUser)
+
 	registerPrivatePage("GET", "/pages/services/{serviceName}/callback", webApp.ServiceCallback)
 	registerPrivatePage("GET", "/pages/services/{serviceName}/register", webApp.ServiceRegister)
 	registerPrivatePage("GET", "/pages/users/{userID}/accounts/{accountID}", webApp.AccountStatus)
@@ -227,7 +230,7 @@ func (wa webApp) AccountStatus(w http.ResponseWriter, r *http.Request) {
 func (wa webApp) GetVersion(req *http.Request) (interface{}, error) {
 	return struct {
 		Version string `json:"version"`
-	}{Version: "0.8-beta"}, nil
+	}{Version: "0.9-beta"}, nil
 }
 
 func (wa webApp) GetServices(req *http.Request) (interface{}, error) {
@@ -256,6 +259,51 @@ func (wa webApp) GetUser(req *http.Request) (interface{}, error) {
 	}
 
 	return data, nil
+}
+
+func (wa webApp) BackupUser(req *http.Request) (interface{}, error) {
+	ctx := req.Context()
+
+	userID := server.Param(req, "userID")
+
+	data, err := wa.app.BackupUser(ctx, userID)
+	if err != nil {
+		e := errors.Wrap(err, "Unable to retrieve user backup")
+		wa.app.Error(ctx, e)
+		return nil, e
+	}
+
+	return data, nil
+}
+
+func (wa webApp) RestoreUser(req *http.Request) (interface{}, error) {
+	ctx := req.Context()
+
+	userID := server.Param(req, "userID")
+
+	body, err := ioutil.ReadAll(req.Body)
+	defer req.Body.Close()
+	if err != nil {
+		e := errors.Wrap(invalidEntry{err}, "Snapshot is missing")
+		wa.app.Error(ctx, e)
+		return nil, e
+	}
+
+	var s api.Snapshot
+	if err := json.Unmarshal(body, &s); err != nil {
+		e := errors.Wrap(invalidEntry{err}, "Snapshot is invalid")
+		wa.app.Error(ctx, e)
+		return nil, e
+	}
+
+	err = wa.app.RestoreUser(ctx, userID, s)
+	if err != nil {
+		e := errors.Wrap(err, "Unable to restore user")
+		wa.app.Error(ctx, e)
+		return nil, e
+	}
+
+	return nil, nil
 }
 
 func (wa webApp) GetAssociatedAccounts(req *http.Request) (interface{}, error) {
