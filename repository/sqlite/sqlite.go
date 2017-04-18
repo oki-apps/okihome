@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -19,6 +20,8 @@ import (
 
 	"github.com/oki-apps/okihome/api"
 )
+
+var rwMutex sync.RWMutex
 
 //Config is the configuration to access the SQLite database
 type Config struct {
@@ -100,6 +103,11 @@ func (r *repo) Execer() sqlx.Execer {
 
 func (r *repo) GetUser(ctx context.Context, userID string) (api.User, error) {
 
+	log.Println("GetUser", "Waiting for lock", userID)
+	rwMutex.RLock()
+	defer rwMutex.RUnlock()
+	log.Println("GetUser", "Lock", userID)
+
 	var u api.User
 	err := sqlx.Get(
 		r.Queryer(), &u,
@@ -111,10 +119,16 @@ func (r *repo) GetUser(ctx context.Context, userID string) (api.User, error) {
 		return api.User{}, errors.Wrap(err, "Fetching user failed")
 	}
 
+	log.Println("GetUser", "UnLock", userID)
 	return u, nil
 }
 
 func (r *repo) StoreUser(ctx context.Context, user *api.User) error {
+
+	log.Println("StoreUser", "Waiting for lock")
+	rwMutex.Lock()
+	defer rwMutex.Unlock()
+	log.Println("StoreUser", "Lock")
 
 	_, err := r.Execer().Exec(
 		"INSERT INTO t_user(id,display_name,email,isadmin) VALUES ($1,$2,$3,$4)",
@@ -123,10 +137,16 @@ func (r *repo) StoreUser(ctx context.Context, user *api.User) error {
 		return errors.Wrap(err, "Inserting user failed")
 	}
 
+	log.Println("StoreUser", "UnLock")
 	return nil
 }
 
 func (r *repo) GetTabs(ctx context.Context, userID string) ([]api.TabSummary, error) {
+
+	log.Println("GetTabs", "Waiting for lock", userID)
+	rwMutex.RLock()
+	defer rwMutex.RUnlock()
+	log.Println("GetTabs", "Lock", userID)
 
 	var tabs []api.TabSummary
 
@@ -142,9 +162,15 @@ WHERE tj_tabaccess.user_id=$1`,
 		return nil, errors.Wrap(err, "Fetching tabs failed")
 	}
 
+	log.Println("GetTabs", "UnLock", userID)
 	return tabs, nil
 }
 func (r *repo) IsTabAccessAllowed(ctx context.Context, userID string, tabID int64) error {
+
+	log.Println("IsTabAccessAllowed", "Waiting for lock", userID, tabID)
+	rwMutex.RLock()
+	defer rwMutex.RUnlock()
+	log.Println("IsTabAccessAllowed", "Lock", userID, tabID)
 
 	var count int64
 	err := sqlx.Get(
@@ -160,10 +186,16 @@ func (r *repo) IsTabAccessAllowed(ctx context.Context, userID string, tabID int6
 		return errors.New("Tab access not allowed")
 	}
 
+	log.Println("IsTabAccessAllowed", "UnLock", userID, tabID)
 	return nil
 
 }
 func (r *repo) AllowTabAccess(ctx context.Context, userID string, tabID int64) error {
+
+	log.Println("AllowTabAccess", "Waiting for lock", userID, tabID)
+	rwMutex.Lock()
+	defer rwMutex.Unlock()
+	log.Println("AllowTabAccess", "Lock", userID, tabID)
 
 	_, err := r.Execer().Exec(
 		"INSERT INTO tj_tabaccess(user_id,tab_id) VALUES ($1,$2)",
@@ -173,10 +205,16 @@ func (r *repo) AllowTabAccess(ctx context.Context, userID string, tabID int64) e
 		return errors.Wrap(err, "Adding tab access failed")
 	}
 
+	log.Println("AllowTabAccess", "UnLock", userID, tabID)
 	return nil
 }
 
 func (r *repo) GetTab(ctx context.Context, tabID int64) (api.Tab, error) {
+
+	log.Println("GetTab", "Waiting for lock", tabID)
+	rwMutex.RLock()
+	defer rwMutex.RUnlock()
+	log.Println("GetTab", "Lock", tabID)
 
 	var t struct {
 		api.Tab
@@ -208,7 +246,7 @@ func (r *repo) GetTab(ctx context.Context, tabID int64) (api.Tab, error) {
 
 			for j, id := range col {
 
-				widget, err := r.GetWidget(ctx, tabID, id)
+				widget, err := r.getWidgetWithoutLock(ctx, tabID, id)
 				if err != nil {
 					return api.Tab{}, errors.Wrap(err, "Retrieving widget failed")
 				}
@@ -219,9 +257,15 @@ func (r *repo) GetTab(ctx context.Context, tabID int64) (api.Tab, error) {
 
 	}
 
+	log.Println("GetTab", "UnLock", tabID)
 	return t.Tab, nil
 }
 func (r *repo) StoreTab(ctx context.Context, tab *api.Tab) error {
+
+	log.Println("StoreTab", "Waiting for lock")
+	rwMutex.Lock()
+	defer rwMutex.Unlock()
+	log.Println("StoreTab", "Lock")
 
 	layout := "["
 	for i, col := range tab.Widgets {
@@ -261,10 +305,16 @@ func (r *repo) StoreTab(ctx context.Context, tab *api.Tab) error {
 		}
 	}
 
+	log.Println("StoreTab", "UnLock")
 	return nil
 }
 
 func (r *repo) DeleteTab(ctx context.Context, tabID int64) error {
+
+	log.Println("DeleteTab", "Waiting for lock", tabID)
+	rwMutex.Lock()
+	defer rwMutex.Unlock()
+	log.Println("DeleteTab", "Lock", tabID)
 
 	_, err := r.Execer().Exec(
 		"DELETE FROM t_tab WHERE id=$1",
@@ -272,10 +322,24 @@ func (r *repo) DeleteTab(ctx context.Context, tabID int64) error {
 	if err != nil {
 		return errors.Wrap(err, "Removing tab failed")
 	}
+	log.Println("DeleteTab", "UnLock", tabID)
 	return nil
 }
-
 func (r *repo) GetWidget(ctx context.Context, tabID int64, widgetID int64) (api.Widget, error) {
+
+	log.Println("GetWidget", "Waiting for lock", tabID, widgetID)
+	rwMutex.RLock()
+	defer rwMutex.RUnlock()
+	log.Println("GetWidget", "Lock", tabID, widgetID)
+
+	w, err := r.getWidgetWithoutLock(ctx, tabID, widgetID)
+
+	log.Println("GetWidget", "UnLock", tabID, widgetID)
+
+	return w, err
+}
+
+func (r *repo) getWidgetWithoutLock(ctx context.Context, tabID int64, widgetID int64) (api.Widget, error) {
 
 	var w struct {
 		Cfg []byte `db:"cfg"`
@@ -315,6 +379,11 @@ func (r *repo) GetWidget(ctx context.Context, tabID int64, widgetID int64) (api.
 
 func (r *repo) StoreWidget(ctx context.Context, tabID int64, widget *api.Widget) error {
 
+	log.Println("StoreWidget", "Waiting for lock", tabID)
+	rwMutex.Lock()
+	defer rwMutex.Unlock()
+	log.Println("StoreWidget", "Lock", tabID)
+
 	configJSON, err := json.Marshal(widget.Config)
 	if err != nil {
 		return errors.Wrap(err, "Marshaling widget config failed")
@@ -342,10 +411,16 @@ func (r *repo) StoreWidget(ctx context.Context, tabID int64, widget *api.Widget)
 		}
 	}
 
+	log.Println("StoreWidget", "UnLock", tabID)
 	return nil
 }
 
 func (r *repo) DeleteWidget(ctx context.Context, tabID int64, widgetID int64) error {
+
+	log.Println("DeleteWidget", "Waiting for lock", tabID, widgetID)
+	rwMutex.Lock()
+	defer rwMutex.Unlock()
+	log.Println("DeleteWidget", "Lock", tabID, widgetID)
 
 	_, err := r.Execer().Exec(
 		"DELETE FROM t_widget WHERE id=$1 AND tab_id=$2",
@@ -353,6 +428,7 @@ func (r *repo) DeleteWidget(ctx context.Context, tabID int64, widgetID int64) er
 	if err != nil {
 		return errors.Wrap(err, "Removing widget failed")
 	}
+	log.Println("DeleteWidget", "UnLock", tabID, widgetID)
 	return nil
 }
 
@@ -440,6 +516,11 @@ func (r *repo) DeleteWidgetFromTab(ctx context.Context, tabID int64, widgetID in
 
 func (r *repo) GetOrCreateFeedID(ctx context.Context, URL string) (int64, error) {
 
+	log.Println("GetOrCreateFeedID", "Waiting for lock", URL)
+	rwMutex.Lock()
+	defer rwMutex.Unlock()
+	log.Println("GetOrCreateFeedID", "Lock", URL)
+
 	var feedID int64
 	err := sqlx.Get(
 		r.Queryer(), &feedID,
@@ -455,7 +536,7 @@ func (r *repo) GetOrCreateFeedID(ctx context.Context, URL string) (int64, error)
 	}
 
 	res, err := r.Execer().Exec(
-		"INSERT INTO t_feed(url,next_retrieval) VALUES ($1,now())",
+		"INSERT INTO t_feed(url,next_retrieval) VALUES ($1,(date('now')))",
 		URL)
 	if err != nil {
 		return 0, errors.Wrap(err, "Inserting feed failed")
@@ -465,17 +546,23 @@ func (r *repo) GetOrCreateFeedID(ctx context.Context, URL string) (int64, error)
 		return 0, errors.Wrap(err, "Retreiving last inserted feed ID failed")
 	}
 
+	log.Println("GetOrCreateFeedID", "UnLock", URL)
 	return feedID, nil
 
 }
 
 func (r *repo) GetFeed(ctx context.Context, feedID int64) (api.Feed, error) {
 
+	log.Println("GetFeed", "Waiting for lock", feedID)
+	rwMutex.RLock()
+	defer rwMutex.RUnlock()
+	log.Println("GetFeed", "Lock", feedID)
+
 	var feed struct {
-		ID            int64      `db:"id"`
-		URL           string     `db:"url"`
-		NextRetrieval *time.Time `db:"next_retrieval"`
-		Title         *string    `db:"title"`
+		ID            int64          `db:"id"`
+		URL           string         `db:"url"`
+		NextRetrieval sql.NullString `db:"next_retrieval"`
+		Title         *string        `db:"title"`
 	}
 
 	//Get the feed
@@ -491,17 +578,26 @@ func (r *repo) GetFeed(ctx context.Context, feedID int64) (api.Feed, error) {
 	var f api.Feed
 	f.ID = feed.ID
 	f.URL = feed.URL
-	if feed.NextRetrieval != nil {
-		f.NextRetrieval = *feed.NextRetrieval
+	if feed.NextRetrieval.Valid {
+		t, err := time.Parse("2006-01-02 15:04:05", feed.NextRetrieval.String)
+		if err != nil {
+			f.NextRetrieval = t
+		}
 	}
 	if feed.Title != nil {
 		f.Title = *feed.Title
 	}
 
+	log.Println("GetFeed", "UnLock", feedID)
 	return f, nil
 }
 
 func (r *repo) GetFeedItems(ctx context.Context, feedID int64) ([]api.FeedItem, error) {
+
+	log.Println("GetFeedItems", "Waiting for lock", feedID)
+	rwMutex.RLock()
+	defer rwMutex.RUnlock()
+	log.Println("GetFeedItems", "Lock", feedID)
 
 	var items []api.FeedItem
 
@@ -515,9 +611,15 @@ func (r *repo) GetFeedItems(ctx context.Context, feedID int64) ([]api.FeedItem, 
 		return nil, errors.Wrap(err, "Retrieving feed items failed")
 	}
 
+	log.Println("GetFeedItems", "UnLock", feedID)
 	return items, nil
 }
 func (r *repo) StoreFeed(ctx context.Context, feed *api.Feed, feedItems []api.FeedItem) error {
+
+	log.Println("StoreFeed", "Waiting for lock")
+	rwMutex.Lock()
+	defer rwMutex.Unlock()
+	log.Println("StoreFeed", "Lock")
 
 	if feed.ID > 0 {
 		//Update
@@ -556,15 +658,21 @@ func (r *repo) StoreFeed(ctx context.Context, feed *api.Feed, feedItems []api.Fe
 			"INSERT INTO t_feeditem (feed_id, guid, title, published, link) VALUES ($1,$2,$3,$4,$5)",
 			feed.ID, item.GUID, item.Title, item.Published, item.Link)
 		if err != nil {
-			return errors.Wrap(err, "Cleaning existing feed items failed")
+			return errors.Wrap(err, "Inserrting new feed items failed")
 		}
 
 	}
 
+	log.Println("StoreFeed", "UnLock")
 	return nil
 }
 
 func (r *repo) AreItemsRead(ctx context.Context, userID string, feedID int64, guids []string) ([]bool, error) {
+
+	log.Println("AreItemsRead", "Waiting for lock", userID, feedID)
+	rwMutex.RLock()
+	defer rwMutex.RUnlock()
+	log.Println("AreItemsRead", "Lock", userID, feedID)
 
 	res := make([]bool, len(guids))
 
@@ -581,9 +689,15 @@ func (r *repo) AreItemsRead(ctx context.Context, userID string, feedID int64, gu
 		res[i] = read
 	}
 
+	log.Println("AreItemsRead", "UnLock", userID, feedID)
 	return res, nil
 }
 func (r *repo) SetItemRead(ctx context.Context, userID string, feedID int64, guid string, read bool) error {
+
+	log.Println("SetItemRead", "Waiting for lock", userID, feedID, guid)
+	rwMutex.Lock()
+	defer rwMutex.Unlock()
+	log.Println("SetItemRead", "Lock", userID, feedID, guid)
 
 	err := sqlx.Get(
 		r.Queryer(), &read,
@@ -609,10 +723,16 @@ func (r *repo) SetItemRead(ctx context.Context, userID string, feedID int64, gui
 		}
 	}
 
+	log.Println("SetItemRead", "UnLock", userID, feedID, guid)
 	return nil
 }
 
 func (r *repo) GetAccount(ctx context.Context, userID string, accountID int64) (api.ExternalAccount, error) {
+
+	log.Println("GetAccount", "Waiting for lock", userID, accountID)
+	rwMutex.RLock()
+	defer rwMutex.RUnlock()
+	log.Println("GetAccount", "Lock", userID, accountID)
 
 	var acc struct {
 		Tokenjson []byte `db:"tokenjson"`
@@ -638,6 +758,11 @@ WHERE t_account.id=$1 AND t_account.user_id=$2`,
 	return acc.ExternalAccount, nil
 }
 func (r *repo) GetAccounts(ctx context.Context, userID string) ([]api.ExternalAccount, error) {
+
+	log.Println("GetAccounts", "Waiting for lock", userID)
+	rwMutex.RLock()
+	defer rwMutex.RUnlock()
+	log.Println("GetAccounts", "Lock", userID)
 
 	accounts := []struct {
 		Tokenjson []byte `db:"tokenjson"`
@@ -671,6 +796,11 @@ WHERE t_account.user_id=$1`,
 }
 func (r *repo) DeleteAccount(ctx context.Context, userID string, accountID int64) error {
 
+	log.Println("DeleteAccount", "Waiting for lock", userID, accountID)
+	rwMutex.Lock()
+	defer rwMutex.Unlock()
+	log.Println("DeleteAccount", "Lock", userID, accountID)
+
 	_, err := r.Execer().Exec(
 		"DELETE FROM t_account WHERE id=$1 AND t_account.user_id=$2",
 		accountID, userID)
@@ -683,6 +813,11 @@ func (r *repo) DeleteAccount(ctx context.Context, userID string, accountID int64
 }
 
 func (r *repo) StoreAccount(ctx context.Context, userID string, account *api.ExternalAccount) error {
+
+	log.Println("StoreAccount", "Waiting for lock", userID)
+	rwMutex.Lock()
+	defer rwMutex.Unlock()
+	log.Println("StoreAccount", "Lock", userID)
 
 	tokenJSON, err := json.Marshal(account.Token)
 	if err != nil {
@@ -717,6 +852,11 @@ func (r *repo) StoreAccount(ctx context.Context, userID string, account *api.Ext
 
 func (r *repo) GetUserFromTemporaryCode(ctx context.Context, serviceName string, code string) (string, error) {
 
+	log.Println("GetUserFromTemporaryCode", "Waiting for lock", serviceName, code)
+	rwMutex.RLock()
+	defer rwMutex.RUnlock()
+	log.Println("GetUserFromTemporaryCode", "Lock", serviceName, code)
+
 	var userID string
 	err := sqlx.Get(
 		r.Queryer(), &userID,
@@ -731,6 +871,11 @@ func (r *repo) GetUserFromTemporaryCode(ctx context.Context, serviceName string,
 }
 func (r *repo) StoreTemporaryCode(ctx context.Context, userID string, serviceName string, code string) error {
 
+	log.Println("StoreTemporaryCode", "Waiting for lock", userID, serviceName, code)
+	rwMutex.Lock()
+	defer rwMutex.Unlock()
+	log.Println("StoreTemporaryCode", "Lock", userID, serviceName, code)
+
 	_, err := r.Execer().Exec(
 		"INSERT INTO t_temporarycode(user_id, provider, code) VALUES ($1,$2,$3)",
 		userID, serviceName, code)
@@ -742,6 +887,11 @@ func (r *repo) StoreTemporaryCode(ctx context.Context, userID string, serviceNam
 	return nil
 }
 func (r *repo) DeleteTemporaryCode(ctx context.Context, userID string, serviceName string) error {
+
+	log.Println("DeleteTemporaryCode", "Waiting for lock", userID, serviceName)
+	rwMutex.Lock()
+	defer rwMutex.Unlock()
+	log.Println("DeleteTemporaryCode", "Lock", userID, serviceName)
 
 	_, err := r.Execer().Exec(
 		"DELETE FROM t_temporarycode WHERE user_id=$1 AND provider=$2",
@@ -755,6 +905,11 @@ func (r *repo) DeleteTemporaryCode(ctx context.Context, userID string, serviceNa
 }
 
 func (r *repo) GetEmailItem(ctx context.Context, account api.ExternalAccount, guid string, minVersion uint64) (api.EmailItem, error) {
+
+	log.Println("GetEmailItem", "Waiting for lock", guid)
+	rwMutex.RLock()
+	defer rwMutex.RUnlock()
+	log.Println("GetEmailItem", "Lock", guid)
 
 	var emailItem api.EmailItem
 	err := sqlx.Get(
@@ -774,6 +929,11 @@ FROM t_emailitem WHERE account_id=$1 AND guid=$2 AND version>=$3`,
 	return emailItem, nil
 }
 func (r *repo) StoreEmailItem(ctx context.Context, account api.ExternalAccount, version uint64, item api.EmailItem) error {
+
+	log.Println("StoreEmailItem", "Waiting for lock")
+	rwMutex.Lock()
+	defer rwMutex.Unlock()
+	log.Println("StoreEmailItem", "Lock")
 
 	var currentVersion uint64
 	err := sqlx.Get(
@@ -812,5 +972,6 @@ WHERE account_id=$1 AND guid=$2`,
 
 	}
 
+	log.Println("StoreEmailItem", "UnLock")
 	return nil
 }
