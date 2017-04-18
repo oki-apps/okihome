@@ -201,7 +201,7 @@ func (app App) RestoreUser(ctx context.Context, userID string, s api.Snapshot) e
 
 	//UserID should match
 	if userID != s.User.UserID {
-		return errors.New("User IDs do not match")
+		return errors.New(fmt.Sprintf("User IDs do not match: '%s' '%s'", userID, s.User.UserID))
 	}
 
 	//No tabs defined for user to update
@@ -210,7 +210,7 @@ func (app App) RestoreUser(ctx context.Context, userID string, s api.Snapshot) e
 		return errors.Wrap(err, "retrieving tab ids from datastore failed")
 	}
 	if len(tabs) > 0 {
-		return errors.New("Restore not possible due to existing tabs")
+		return errors.New(fmt.Sprintf("Restore not possible due %d to existing tabs", len(tabs)))
 	}
 
 	//Get account matching
@@ -250,10 +250,13 @@ func (app App) RestoreUser(ctx context.Context, userID string, s api.Snapshot) e
 		}
 
 		for i, c := range t.Widgets {
-			for j, w := range c {
+			newTab.Widgets = append(newTab.Widgets, nil)
+
+			for _, w := range c {
 
 				newWidget := w
 				newWidget.ID = 0
+				newWidget.SetupTypedConfig()
 
 				//Map account id/feed id in widget configs
 				switch newWidget.Type {
@@ -282,7 +285,7 @@ func (app App) RestoreUser(ctx context.Context, userID string, s api.Snapshot) e
 					return errors.Wrap(err, "creating widget failed")
 				}
 
-				newTab.Widgets[i][j] = newWidget
+				newTab.Widgets[i] = append(newTab.Widgets[i], newWidget)
 			}
 		}
 

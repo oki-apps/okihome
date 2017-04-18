@@ -66,3 +66,55 @@ func NewWidgetEmail(id int64, cfg ConfigEmail) Widget {
 		Config: cfg,
 	}
 }
+
+//SetupTypedConfig recreate the typed config from a map[string]interface{}
+func (w *Widget) SetupTypedConfig() {
+
+	if cfg, ok := w.Config.(map[string]interface{}); ok {
+
+		widgetConfig := WidgetConfig{}
+		if v, ok := cfg["title"]; ok {
+			if s, ok := v.(string); ok {
+				widgetConfig.Title = s
+			}
+		}
+		if v, ok := cfg["display_count"]; ok {
+			if f, ok := v.(float64); ok {
+				widgetConfig.DisplayCount = int(f)
+			}
+		}
+		if v, ok := cfg["link"]; ok {
+			if s, ok := v.(string); ok {
+				widgetConfig.Link = s
+			}
+		}
+
+		switch w.Type {
+		case WidgetEmailType:
+			newCfg := ConfigEmail{
+				WidgetConfig: widgetConfig,
+			}
+			if v, ok := cfg["account_id"]; ok {
+				if f, ok := v.(float64); ok {
+					newCfg.AccountID = int64(f)
+				}
+			}
+			w.Config = newCfg
+		case WidgetFeedType:
+			newCfg := ConfigFeed{
+				WidgetConfig: widgetConfig,
+			}
+			if v, ok := cfg["url"]; ok {
+				if s, ok := v.(string); ok {
+					newCfg.URL = s
+				}
+			}
+			if v, ok := cfg["feed_id"]; ok {
+				if f, ok := v.(float64); ok {
+					newCfg.FeedID = int64(f)
+				}
+			}
+			w.Config = newCfg
+		}
+	}
+}
