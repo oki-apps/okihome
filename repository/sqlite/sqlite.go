@@ -580,7 +580,7 @@ func (r *repo) GetFeed(ctx context.Context, feedID int64) (api.Feed, error) {
 	f.URL = feed.URL
 	if feed.NextRetrieval.Valid {
 		t, err := time.Parse("2006-01-02 15:04:05", feed.NextRetrieval.String)
-		if err != nil {
+		if err == nil {
 			f.NextRetrieval = t
 		}
 	}
@@ -599,7 +599,13 @@ func (r *repo) GetFeedItems(ctx context.Context, feedID int64) ([]api.FeedItem, 
 	defer rwMutex.RUnlock()
 	log.Println("GetFeedItems", "Lock", feedID)
 
-	var items []api.FeedItem
+	type feedItem struct {
+		GUID      string `db:"guid"`
+		Title     string `db:"title"`
+		Published string `db:"published"`
+		Link      string `db:"link"`
+	}
+	var items []feedItem
 
 	//Get the feed
 	err := sqlx.Select(
@@ -611,8 +617,19 @@ func (r *repo) GetFeedItems(ctx context.Context, feedID int64) ([]api.FeedItem, 
 		return nil, errors.Wrap(err, "Retrieving feed items failed")
 	}
 
+	itemsDecoded := make([]api.FeedItem, len(items), len(items))
+	for i := range items {
+		itemsDecoded[i].GUID = items[i].GUID
+		itemsDecoded[i].Title = items[i].Title
+		t, err := time.Parse("2006-01-02 15:04:05", items[i].Published)
+		if err == nil {
+			itemsDecoded[i].Published = t
+		}
+		itemsDecoded[i].Link = items[i].Link
+	}
+
 	log.Println("GetFeedItems", "UnLock", feedID)
-	return items, nil
+	return itemsDecoded, nil
 }
 func (r *repo) StoreFeed(ctx context.Context, feed *api.Feed, feedItems []api.FeedItem) error {
 
