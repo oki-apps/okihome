@@ -1,0 +1,15 @@
+{
+    "Server": {
+        "OpenIDConnectIssuer": "https://accounts.google.com"
+    },
+    "Gmail": {
+        "ClientID": "844314575348-k2jjq389r7n5il2jbkr4ogqd134die70.apps.googleusercontent.com",
+        "ClientSecret": "J9GtQnAnhz6g8EgJxIJ8ei4j ",
+        "RedirectURL": "https://home.okiapps.com/pages/services/google/callback"
+    },
+    "Outlook": {
+        "ClientID": "cb195e5f-0d1c-4b08-97ca-360a3c21eb45",
+        "ClientSecret": "ef7PgzxnhUwnsJTXpxo55Uz",
+        "RedirectURL": "https://home.okiapps.com/pages/services/outlook/callback"
+    }
+}

@@ -816,8 +816,8 @@ func (app App) feed(ctx context.Context, feedID int64, loadItems bool) (api.Feed
 		}
 
 		//Store in datastore
-		go func() { //TODO queue and use an other context
-			err := app.repository.StoreFeed(ctx, &feed, feedItems)
+		go func() {
+			err := app.repository.StoreFeed(context.Background(), &feed, feedItems)
 			if err != nil {
 				app.Error(ctx, errors.Wrap(err, "storage of feed failed"))
 			}
