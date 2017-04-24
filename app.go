@@ -932,12 +932,10 @@ func (app App) MarkAsRead(ctx context.Context, userID string, feedID int64, guid
 		}
 	}
 
-	//Store th new status in datastore
-	for _, guid := range guids {
-		err = app.repository.SetItemRead(ctx, userID, feedID, guid, true)
-		if err != nil {
-			return errors.Wrap(err, "saving read status failed")
-		}
+	//Store the new status in datastore
+	err = app.repository.SetItemsRead(ctx, userID, feedID, guids, true)
+	if err != nil {
+		return errors.Wrap(err, "saving read status failed")
 	}
 
 	return nil

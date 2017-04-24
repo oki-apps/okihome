@@ -602,6 +602,17 @@ func (r *repo) SetItemRead(ctx context.Context, userID string, feedID int64, gui
 	return nil
 }
 
+func (r *repo) SetItemsRead(ctx context.Context, userID string, feedID int64, guids []string, read bool) error {
+
+	for _, guid := range guids {
+		err := r.SetItemRead(ctx, userID, feedID, guid, read)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (r *repo) GetAccount(ctx context.Context, userID string, accountID int64) (api.ExternalAccount, error) {
 
 	var acc struct {

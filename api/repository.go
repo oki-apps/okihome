@@ -41,6 +41,7 @@ type Repository interface {
 
 	AreItemsRead(ctx context.Context, userID string, feedID int64, guids []string) ([]bool, error)
 	SetItemRead(ctx context.Context, userID string, feedID int64, guid string, read bool) error
+	SetItemsRead(ctx context.Context, userID string, feedID int64, guid []string, read bool) error
 
 	GetAccount(ctx context.Context, userID string, accountID int64) (ExternalAccount, error)
 	GetAccounts(ctx context.Context, userID string) ([]ExternalAccount, error)

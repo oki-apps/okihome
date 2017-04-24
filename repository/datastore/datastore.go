@@ -154,6 +154,9 @@ func (r *repo) AreItemsRead(ctx context.Context, userID string, feedID int64, gu
 func (r *repo) SetItemRead(ctx context.Context, userID string, feedID int64, guid string, read bool) error {
 	return errors.New("Not implemented")
 }
+func (r *repo) SetItemsRead(ctx context.Context, userID string, feedID int64, guids []string, read bool) error {
+	return errors.New("Not implemented")
+}
 
 func (r *repo) GetAccount(ctx context.Context, userID string, accountID int64) (api.ExternalAccount, error) {
 	return api.ExternalAccount{}, errors.New("Not implemented")

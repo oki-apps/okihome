@@ -692,12 +692,7 @@ func (r *repo) AreItemsRead(ctx context.Context, userID string, feedID int64, gu
 	log.Println("AreItemsRead", "UnLock", userID, feedID)
 	return res, nil
 }
-func (r *repo) SetItemRead(ctx context.Context, userID string, feedID int64, guid string, read bool) error {
-
-	log.Println("SetItemRead", "Waiting for lock", userID, feedID, guid)
-	rwMutex.Lock()
-	defer rwMutex.Unlock()
-	log.Println("SetItemRead", "Lock", userID, feedID, guid)
+func (r *repo) setItemRead(ctx context.Context, userID string, feedID int64, guid string, read bool) error {
 
 	err := sqlx.Get(
 		r.Queryer(), &read,
@@ -723,7 +718,39 @@ func (r *repo) SetItemRead(ctx context.Context, userID string, feedID int64, gui
 		}
 	}
 
+	return nil
+}
+func (r *repo) SetItemRead(ctx context.Context, userID string, feedID int64, guid string, read bool) error {
+
+	log.Println("SetItemRead", "Waiting for lock", userID, feedID, guid)
+	rwMutex.Lock()
+	defer rwMutex.Unlock()
+	log.Println("SetItemRead", "Lock", userID, feedID, guid)
+
+	err := r.setItemRead(ctx, userID, feedID, guid, read)
+	if err != nil {
+		return err
+	}
+
 	log.Println("SetItemRead", "UnLock", userID, feedID, guid)
+	return nil
+}
+
+func (r *repo) SetItemsRead(ctx context.Context, userID string, feedID int64, guids []string, read bool) error {
+
+	log.Println("SetItemsRead", "Waiting for lock", userID, feedID)
+	rwMutex.Lock()
+	defer rwMutex.Unlock()
+	log.Println("SetItemsRead", "Lock", userID, feedID)
+
+	for _, guid := range guids {
+		err := r.setItemRead(ctx, userID, feedID, guid, read)
+		if err != nil {
+			return err
+		}
+	}
+
+	log.Println("SetItemsRead", "UnLock", userID, feedID)
 	return nil
 }
 
